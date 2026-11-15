@@ -169,6 +169,7 @@ void compareAudio(PluginInstance& legacy, PluginInstance& native) {
     std::size_t count = 0, cases = 0, mismatches = 0;
     std::chrono::steady_clock::duration legacyTime{}, nativeTime{};
     for (const bool live : {false, true}) {
+        const auto mismatchesBeforeMode = mismatches;
         for (const double rate : {44100., 48000., 88200., 96000., 192000.}) {
             for (const int block : {16, 32, 64, 128, 256, 512, 1024}) {
                 for (const int main : {1, 2}) {
@@ -232,6 +233,8 @@ void compareAudio(PluginInstance& legacy, PluginInstance& native) {
                 }
             }
         }
+        std::cout << (live ? "Live" : "Studio") << " mismatched samples "
+                  << mismatches - mismatchesBeforeMode << '\n';
     }
     std::cout << "Cases " << cases << ", samples " << count << ", mismatches " << mismatches
               << ", peak error " << peak << ", RMS error " << std::sqrt(totalSquared / count)
@@ -254,12 +257,16 @@ int main(int argc, char** argv) {
         PluginInstance legacy(argv[1]), native(argv[2]);
         if (argc == 5) {
             const std::filesystem::path out(argv[4]);
+            legacy.prepare(48000., 512, true, 2, 0, kSample32);
+            native.prepare(48000., 512, true, 2, 0, kSample32);
             spacer_capture::capture(*legacy.controller, out / "legacy-default", true);
             spacer_capture::capture(*native.controller, out / "native-default", true);
             spacer_capture::capture(*legacy.controller, out / "legacy-min", false, 396, 324);
             spacer_capture::capture(*native.controller, out / "native-min", false, 396, 324);
             spacer_capture::capture(*legacy.controller, out / "legacy-max", false, 990, 810);
             spacer_capture::capture(*native.controller, out / "native-max", false, 990, 810);
+            legacy.stop();
+            native.stop();
             return EXIT_SUCCESS;
         }
         if (argc == 4) {

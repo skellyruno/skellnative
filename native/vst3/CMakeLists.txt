@@ -124,6 +124,15 @@ if(SKELLNATIVE_BUILD_SPACER)
       message(FATAL_ERROR "Missing Spacer reference DSP header: ${header}")
     endif()
   endforeach()
+  # V16 keeps these header names but removes the Studio DSP. Fail at configure
+  # time with an actionable error if a V16 checkout is provided accidentally.
+  file(STRINGS "${SKELLNATIVE_SPACER_SOURCE}/Source/SpacerDSP.h"
+    SKELLNATIVE_SPACER_STUDIO_DECLARATION REGEX "^class SpacerEngine ")
+  if(NOT SKELLNATIVE_SPACER_STUDIO_DECLARATION)
+    message(FATAL_ERROR
+      "The two-engine Spacer DEV target needs Spacer reference 05373baa. "
+      "The supplied checkout has no Studio engine. Omit SKELLNATIVE_SPACER_SOURCE to fetch the pinned source.")
+  endif()
   smtg_add_vst3plugin(SkellSpacerNative PACKAGE_NAME "Skell Spacer Native DEV"
     Spacer/Factory.cpp Spacer/VstProcessor.cpp Spacer/VstController.cpp Spacer/Editor.cpp)
   target_include_directories(SkellSpacerNative PRIVATE "${SKELLNATIVE_SPACER_SOURCE}/Source")

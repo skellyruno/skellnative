@@ -1,5 +1,6 @@
 #pragma once
 #include <SkellDraw/Win32Painter.h>
+#include <cwchar>
 
 namespace skelldraw::win32 {
 
@@ -21,8 +22,29 @@ public:
     }
 
     void text(const wchar_t* content, Rect r, int size, bool bold, std::uint32_t rgb,
-              UINT align = DT_CENTER) const {
-        label(dc_, content, size, bold ? FW_BOLD : FW_NORMAL, r.x, r.y, r.width, r.height, color(rgb), align);
+              UINT align = DT_CENTER, int tracking = 0) const {
+        if (!tracking) {
+            label(dc_, content, size, bold ? FW_BOLD : FW_NORMAL, r.x, r.y, r.width, r.height, color(rgb), align);
+            return;
+        }
+        auto font = CreateFontW(-size, 0, 0, 0, bold ? FW_BOLD : FW_NORMAL, FALSE, FALSE, FALSE,
+                                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+        if (!font) return;
+        const auto saved = SaveDC(dc_);
+        SelectObject(dc_, font);
+        SetBkMode(dc_, TRANSPARENT);
+        SetTextColor(dc_, color(rgb));
+        SetTextCharacterExtra(dc_, tracking);
+        const auto count = static_cast<int>(std::wcslen(content));
+        SIZE extent{};
+        if (GetTextExtentPoint32W(dc_, content, count, &extent)) {
+            const int spare = r.width - extent.cx;
+            const int x = r.x + (align == DT_RIGHT ? spare : align == DT_CENTER ? spare / 2 : 0);
+            TextOutW(dc_, x, r.y + (r.height - extent.cy) / 2, content, count);
+        }
+        RestoreDC(dc_, saved);
+        DeleteObject(font);
     }
 
     void outline(Rect r, std::uint32_t rgb) const {
@@ -46,7 +68,8 @@ public:
     void button(Rect r, const wchar_t* title, bool on, bool hot, bool down) const {
         rect(r, on ? palette_.accent : down ? palette_.pressed : hot ? palette_.hover : palette_.panel);
         outline(r, on ? palette_.accent : hot ? palette_.muted : palette_.line);
-        text(title, r, 12, true, on ? palette_.onAccent : hot ? palette_.accent : palette_.text);
+        text(title, r, 12, true, on ? palette_.onAccent : hot ? palette_.accent : palette_.text,
+             DT_CENTER, 1);
     }
 
     void circle(int x, int y, int width, int height, std::uint32_t rgb, std::uint32_t border) const {

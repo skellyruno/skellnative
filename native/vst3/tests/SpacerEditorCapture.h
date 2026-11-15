@@ -4,6 +4,7 @@
 #endif
 #include <windows.h>
 #include "pluginterfaces/gui/iplugview.h"
+#include "pluginterfaces/gui/iplugviewcontentscalesupport.h"
 #include "pluginterfaces/vst/ivsteditcontroller.h"
 #include <filesystem>
 #include <fstream>
@@ -84,15 +85,21 @@ inline void capture(IEditController& controller, const std::filesystem::path& ou
         const auto view = owned(controller.createView(ViewType::kEditor));
         require(view != nullptr && view->attached(parent.window, kPlatformTypeHWND) == kResultOk,
                 "Attach screenshot editor");
+        if (FUnknownPtr<IPlugViewContentScaleSupport> dpi{view})
+            require(dpi->setContentScaleFactor(1.f) == kResultOk, "Set 100% editor scale");
         ViewRect rect{0, 0, width, height};
         require(view->onSize(&rect) == kResultOk, "Resize screenshot editor");
+        pump(80);
+        const auto child = GetWindow(parent.window, GW_CHILD);
+        RECT childBounds{};
+        require(child && GetClientRect(child, &childBounds)
+                    && childBounds.right == width && childBounds.bottom == height,
+                "Editor client size differs from capture size");
         for (int i = 0; i < (cycleThemes ? 4 : 1); ++i) {
             auto path = output;
             path += "-" + std::to_string(i) + ".bmp";
             parent.capture(path);
             if (cycleThemes) {
-                const auto child = ChildWindowFromPoint(parent.window, POINT{25, 24});
-                require(child && child != parent.window, "Editor child");
                 const auto point = MAKELPARAM(25, 24);
                 SendMessageW(child, WM_LBUTTONDOWN, MK_LBUTTON, point);
                 SendMessageW(child, WM_LBUTTONUP, 0, point);

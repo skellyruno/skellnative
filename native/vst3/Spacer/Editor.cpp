@@ -399,8 +399,8 @@ void Editor::paint(HDC target, int width, int height) {
     p.rect({0, 0, designWidth, designHeight}, t.background);
     if (hovered_ == logo || pressed_ == logo) p.rect(bounds(logo), t.hover);
     spacerMark(p, t);
-    p.text(L"SKELL SPACER", {100, 9, 169, 26}, 19, true, t.text, DT_LEFT);
-    p.text(L"SPACE / DUCK / SIDECHAIN", {101, 33, 172, 14}, 10, false, t.muted, DT_LEFT);
+    p.text(L"SKELL SPACER", {100, 9, 169, 26}, 19, true, t.text, DT_LEFT, 3);
+    p.text(L"SPACE / DUCK / SIDECHAIN", {101, 33, 172, 14}, 10, false, t.muted, DT_LEFT, 1);
     button(live, L"LIVE");
     button(freeze, L"FREEZE");
     button(power, L"POWER");
@@ -409,13 +409,13 @@ void Editor::paint(HDC target, int width, int height) {
     for (int i = 0; i < 48; ++i)
         p.rect({14 + static_cast<int>(std::lround(522 * i / 48.f)), 56, 9, i < lit ? 3 : 2}, i < lit ? t.accent : t.faint);
     p.card({14, 66, 522, 184});
-    p.text(L"SPECTRUM", {30, 72, 120, 14}, 11, true, t.muted, DT_LEFT);
+    p.text(L"SPECTRUM", {30, 72, 120, 14}, 11, true, t.muted, DT_LEFT, 2);
     wchar_t details[128]{};
     std::swprintf(details, 128, L"%.1f kHz   /   %u smp latency", spectrum_.rate / 1000., spectrum_.latency);
     p.text(details, {150, 72, 190, 14}, 10, false, t.muted, DT_LEFT);
     const bool pending = active(live) != (spectrum_.latency == 0);
     p.text(pending ? L"MODE PENDING" : spectrum_.sidechainActive ? L"SIDECHAIN OK" : L"NO SIDECHAIN",
-           {330, 72, 192, 14}, 11, true, !pending && spectrum_.sidechainActive ? t.accent : 0xe58a6b, DT_RIGHT);
+           {330, 72, 192, 14}, 11, true, !pending && spectrum_.sidechainActive ? t.accent : 0xe58a6b, DT_RIGHT, 2);
     p.rect(graph, t.background);
     constexpr Rect grid{36, 100, 478, 132};
     const auto lineY = grid.y + std::lround(.42f * grid.height);
@@ -434,7 +434,12 @@ void Editor::paint(HDC target, int width, int height) {
     p.curve(spectrum_.cut, {grid.x, static_cast<int>(lineY), grid.width, 55}, 0.f, 24.f, t.accent, true, 2);
     std::swprintf(details, 128, L"MAX CUT  %.1f dB", -peak);
     p.text(details, {40, 101, 160, 12}, 10, true, t.accent, DT_LEFT);
-    p.text(L"TRACK    SIDECHAIN    CUT", {337, 217, 171, 13}, 9, true, t.muted, DT_RIGHT);
+    p.rect({330, 221, 8, 7}, t.muted);
+    p.text(L"TRACK", {341, 217, 38, 13}, 9, true, t.muted, DT_LEFT, 1);
+    p.rect({389, 224, 8, 2}, t.text);
+    p.text(L"SIDECHAIN", {400, 217, 66, 13}, 9, true, t.muted, DT_LEFT, 1);
+    p.rect({474, 224, 8, 2}, t.accent);
+    p.text(L"CUT", {485, 217, 24, 13}, 9, true, t.muted, DT_LEFT, 1);
     if (active(freeze)) {
         p.rect({40, 217, 58, 13}, t.accent);
         p.text(L"FROZEN", {40, 217, 58, 13}, 10, true, t.onAccent);
@@ -452,14 +457,14 @@ void Editor::paint(HDC target, int width, int height) {
         if (i) p.segment(14 + i * 87, 268, 14 + i * 87, 348, t.line);
         p.rotary(slot(i), paintedValues_[index], index == pan, hovered_ == index, pressed_ == index, details);
         p.text(index == pan && active(ms) ? L"PAN  M / S" : labels[i], {14 + i * 87, 336, 87, 16},
-               11, true, t.muted);
+               11, true, t.muted, DT_CENTER, 2);
     }
     if (hovered_ == ms || pressed_ == ms) p.outline(bounds(ms), t.accent);
 
     p.card({14, 368, 522, 70});
-    p.text(L"LOW CUT", {30, 374, 70, 14}, 11, true, t.muted, DT_LEFT);
-    p.text(L"HIGH CUT", {450, 374, 72, 14}, 11, true, t.muted, DT_RIGHT);
-    p.text(L"BAND", {14, 374, 522, 14}, 11, true, t.muted);
+    p.text(L"LOW CUT", {30, 374, 70, 14}, 11, true, t.muted, DT_LEFT, 1);
+    p.text(L"HIGH CUT", {450, 374, 72, 14}, 11, true, t.muted, DT_RIGHT, 1);
+    p.text(L"BAND", {14, 374, 522, 14}, 11, true, t.muted, DT_CENTER, 2);
     valueText(low, details);
     p.text(details, {92, 374, 100, 14}, 12, true, t.text, DT_LEFT);
     valueText(high, details);

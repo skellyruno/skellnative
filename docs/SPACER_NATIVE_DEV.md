@@ -56,3 +56,30 @@ FL Studio loading/PDC/automation/project recall, pixel parity, DPI matrix and
 Forge export require further verification or implementation. The Win32 editor
 is a first implementation of the reference layout and all four palettes.
 Production Spacer and the V16 draft remain separate.
+
+## November 15 local verification
+
+| Gate | Status | Evidence |
+| --- | --- | --- |
+| Windows x64 Release, direct VST3 and SkellDraw | PASS | MSVC 19.51.36260, SDK 3.8.1. No MSVC warnings in the Spacer build log. |
+| JUCE-free link graph | PASS | Spacer headers only, SDK and SkellNative/SkellDraw CMake targets. PE imports Windows system DLLs and the MSVC runtime. |
+| Steinberg validator | PASS | 47 passed, 0 failed. Its sample-accuracy check reports unread intermediate points, expected from legacy block queue behavior. |
+| Numeric parameter IDs, flags, defaults and sampled display strings | PASS | All 13 entries including host Bypass matched the compiled legacy controller. |
+| Engine latency and Studio waveform | PASS | 420 case latency comparisons matched. Studio matched sample-for-sample in all 210 Studio cases. |
+| Live bit-exact waveform | FAIL | 2,339,485 sample differences out of 14,751,450 combined samples. Overall peak error 2.38418579e-7 and RMS 1.51009558e-8. No tolerance was substituted for the exact gate. |
+| CPU improvement | UNVERIFIED | Two runs' aggregate callback wall times varied. Standalone run totals were about 7.89 s legacy and 7.85 s native. Concurrent run totals were about 15.37 s legacy and 15.50 s native. |
+| Native editor lifecycle smoke | PASS | The binary capture harness attached, sized and removed the actual editors repeatedly, at 495x405, 396x324 and 990x810. |
+| Exact UI parity | FAIL | Inspected real 100% matched-size captures. Typography, antialiasing, resize affordance and finer spectrum rendering differ. Active processing, menus and 125/150/200% DPI remain unverified. |
+| Legacy state and FL Studio | UNVERIFIED | Native state round-trip received validator coverage. Legacy state bytes were captured. Import and DAW session recall remain open. |
+| Forge native exporter | UNVERIFIED | Forge hardening draft ran 84 tests with four skips. CMake is the current independent build entry point. |
+| Shared SDK and optional World integration | PASS within pilot scope | No World runtime dependency. SkellNative portable audio suite and 9 metadata tests passed. Core Movement/FDN draft passed 16 portable CTests and SkellLang extraction passed 18 tests. |
+| V16 compatibility decision and CPU | FAIL / UNVERIFIED | Published-ID guard passed. V16 MSVC DSP and stress signals passed, but the 48 kHz Live timing and the 192 kHz stress timing gates failed under concurrent local load. V16 drops Studio/Link semantics. |
+
+The Windows test bundle is experimental. ZIP SHA-256
+`90CA4B13223A994697C0A56234446491315056659D2AC37181AE58D1E3EE0896`.
+Binary SHA-256 `CD466A22577EF8D8D52B6157D2ED3BEDF3B40A04C0DBC486BAD93903FFF92EA3`.
+
+To investigate the remaining exact Live difference, use the binary harness
+to find the first differing sample within one Live fixture, capture its
+effective parameter values in both processors, then compare the first
+differing 60-band control update. Continue keeping V16 measurements separate.
