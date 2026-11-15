@@ -164,7 +164,7 @@ struct Buffers {
     }
 };
 
-void compareAudio(PluginInstance& legacy, PluginInstance& native) {
+void compareAudio(PluginInstance& legacy, PluginInstance& native, bool automateSmooth = false) {
     double totalSquared = 0.0, peak = 0.0;
     std::size_t count = 0, cases = 0, mismatches = 0;
     std::chrono::steady_clock::duration legacyTime{}, nativeTime{};
@@ -196,6 +196,8 @@ void compareAudio(PluginInstance& legacy, PluginInstance& native) {
                                 PluginInstance::add(changes, spacer::amount, 1, stage == 0 ? 0.95f : 0.7f);
                                 PluginInstance::add(changes, spacer::attack, 1, 0.61f);
                                 PluginInstance::add(changes, spacer::release, 1, 0.29f);
+                                if (automateSmooth)
+                                    PluginInstance::add(changes, spacer::smooth, 1, stage == 2 ? 0.57f : 0.3f);
                                 PluginInstance::add(changes, spacer::low, 1, 0.11f);
                                 PluginInstance::add(changes, spacer::high, 1, 0.9f);
                                 PluginInstance::add(changes, spacer::link, 1, stage >= 2 ? 0.53f : 0.f);
@@ -219,6 +221,11 @@ void compareAudio(PluginInstance& legacy, PluginInstance& native) {
                                     require(std::isfinite(a.outputs[ch][i]) && std::isfinite(b.outputs[ch][i]),
                                             "Nonfinite output");
                                     const auto error = static_cast<double>(a.outputs[ch][i]) - b.outputs[ch][i];
+                                    if (error != 0.0 && mismatches == 0)
+                                        std::cout << "First mismatch: live=" << live << " rate=" << rate
+                                                  << " block=" << block << " main=" << main << " side=" << side
+                                                  << " sample=" << start + i << " stage=" << stage << " channel=" << ch
+                                                  << " legacy=" << a.outputs[ch][i] << " native=" << b.outputs[ch][i] << '\n';
                                     peak = std::max(peak, std::abs(error));
                                     totalSquared += error * error;
                                     mismatches += error != 0.0;
@@ -245,6 +252,63 @@ void compareAudio(PluginInstance& legacy, PluginInstance& native) {
 
 #include "SpacerEditorCapture.h"
 
+void testMini(const char* path) {
+    PluginInstance mini(path);
+    auto& component = *mini.component;
+    auto& audio = *mini.processor;
+    SpeakerArrangement mono = SpeakerArr::kMono;
+    require(audio.setBusArrangements(&mono, 1, &mono, 1) == kResultOk, "Mini mono arrangement");
+    require(component.activateBus(kAudio, kInput, 0, true) == kResultOk, "Mini input");
+    require(component.activateBus(kAudio, kOutput, 0, true) == kResultOk, "Mini output");
+    constexpr int block = 256, rate = 48000, length = 2 * rate;
+    ProcessSetup setup{kOffline, kSample32, block, rate};
+    require(audio.setupProcessing(setup) == kResultOk, "Mini prepare");
+    require(mini.controller->getParameterCount() == 5, "Generated Mini controls");
+    const auto run = [&](float wet) {
+        require(component.setActive(true) == kResultOk, "Mini activation");
+        require(audio.setProcessing(true) == kResultOk, "Mini processing start");
+        ParameterChanges changes(1);
+        int32 entry{};
+        auto* queue = changes.addParameterData(2102, entry);
+        require(queue && queue->addPoint(0, wet, entry) == kResultOk, "Mini mix automation");
+        Buffers<float> buffers(block, 1, 0);
+        buffers.data.numInputs = 1;
+        std::vector<float> result;
+        result.reserve(length);
+        for (int start = 0; start < length; start += block) {
+            const int n = std::min(block, length - start);
+            buffers.data.numSamples = n;
+            buffers.data.inputParameterChanges = start == 0 ? &changes : nullptr;
+            for (int i = 0; i < n; ++i)
+                buffers.inputs[0][i] = 0.2f * static_cast<float>(std::sin(6.283185307179586 * 430 * (start + i) / rate));
+            require(audio.process(buffers.data) == kResultOk, "Mini render");
+            for (int i = 0; i < n; ++i) {
+                require(std::isfinite(buffers.outputs[0][i]), "Mini finite output");
+                result.push_back(buffers.outputs[0][i]);
+            }
+        }
+        mini.stop();
+        return result;
+    };
+    const auto dry = run(0.f);
+    const auto wet = run(1.f);
+    const auto latency = static_cast<int>(audio.getLatencySamples());
+    require(latency >= 0 && latency < rate / 4, "Mini reported delay");
+    const auto crossings = [&](const auto& samples) {
+        int count = 0;
+        for (int i = rate + 1; i < length; ++i)
+            if (samples[i - 1] <= 0 && samples[i] > 0) ++count;
+        return count;
+    };
+    for (int i = rate; i < length; ++i) {
+        const float expected = 0.2f * static_cast<float>(std::sin(6.283185307179586 * 430 * (i - latency) / rate));
+        require(std::abs(dry[i] - expected) < 1e-6f, "Mini dry path must match reported delay");
+    }
+    const int dryHz = crossings(dry), wetHz = crossings(wet);
+    std::cout << "Mini pitch dry=" << dryHz << "Hz wet=" << wetHz << "Hz latency=" << latency << " samples\n";
+    require(std::abs(dryHz - 430) <= 1 && std::abs(wetHz - 440) <= 3, "Mini pitch correction");
+}
+
 int main(int argc, char** argv) {
     if (argc < 3 || argc > 5 || (argc == 5 && std::string(argv[3]) != "--capture")) {
         std::cerr << "Usage: SpacerVst3Parity <legacy.vst3> <native.vst3> [state.bin | --capture dir]\n";
@@ -254,6 +318,10 @@ int main(int argc, char** argv) {
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         HostApplication context;
         PluginContextFactory::instance().setPluginContext(&context);
+        if (argc == 3 && std::string(argv[1]) == "--mini") {
+            testMini(argv[2]);
+            return EXIT_SUCCESS;
+        }
         PluginInstance legacy(argv[1]), native(argv[2]);
         if (argc == 5) {
             const std::filesystem::path out(argv[4]);
@@ -278,6 +346,7 @@ int main(int argc, char** argv) {
         }
         compareParameters(legacy, native);
         compareAudio(legacy, native);
+        compareAudio(legacy, native, true);
         return EXIT_SUCCESS;
     } catch (const std::exception& e) {
         std::cerr << e.what() << '\n';
