@@ -5,6 +5,8 @@ if(NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
   message(FATAL_ERROR "SkellNative direct VST3 prototype targets Windows x64 only")
 endif()
 
+option(SKELLNATIVE_BUILD_MINI "Build the Skell Mini Native DEV pilot" OFF)
+
 # Pin the MIT-licensed official Steinberg 3.8.1 SDK with its submodules.
 # Existing local SDK source avoids network on subsequent builds.
 set(SKELLNATIVE_STEINBERG_SDK "" CACHE PATH "Local complete VST3 SDK checkout")
@@ -137,11 +139,37 @@ if(SKELLNATIVE_BUILD_SPACER)
     Spacer/Factory.cpp Spacer/VstProcessor.cpp Spacer/VstController.cpp Spacer/Editor.cpp)
   target_include_directories(SkellSpacerNative PRIVATE "${SKELLNATIVE_SPACER_SOURCE}/Source")
   target_link_libraries(SkellSpacerNative PRIVATE sdk SkellNativeDSP SkellDrawControls user32 gdi32)
+endif()
 
+if(SKELLNATIVE_BUILD_SPACER OR SKELLNATIVE_BUILD_MINI)
   add_executable(SpacerVst3Parity tests/SpacerVst3Parity.cpp
     "${SDK_ROOT}/public.sdk/source/common/memorystream.cpp"
     "${SDK_ROOT}/public.sdk/source/vst/hosting/module_win32.cpp"
     "${SDK_ROOT}/public.sdk/source/vst/hosting/plugprovider.cpp")
   target_compile_features(SpacerVst3Parity PRIVATE cxx_std_17)
   target_link_libraries(SpacerVst3Parity PRIVATE sdk_hosting user32 gdi32)
+endif()
+if(SKELLNATIVE_BUILD_MINI)
+  include(FetchContent)
+  FetchContent_Declare(skellmini_reference
+    GIT_REPOSITORY https://github.com/skellyruno/skelltune-mini.git
+    GIT_TAG 6a1c0267967cab696f8d3b3371e9c40a4ed75a78
+    SOURCE_SUBDIR native-headers-only)
+  FetchContent_Declare(skelllang_compiler
+    GIT_REPOSITORY https://github.com/skellyruno/skellLang.git
+    GIT_TAG a5c1d71b646c7ea5a0f122b289bcef372a035a45
+    SOURCE_SUBDIR compiler-only)
+  FetchContent_MakeAvailable(skellmini_reference skelllang_compiler)
+  set(mini_controls "${CMAKE_CURRENT_BINARY_DIR}/MiniControls.inc")
+  add_custom_command(OUTPUT "${mini_controls}"
+    COMMAND "${Python3_EXECUTABLE}" -B -m skelllang.native_controls
+      "${CMAKE_CURRENT_SOURCE_DIR}/Mini/Mini.skell" "${mini_controls}"
+    WORKING_DIRECTORY "${skelllang_compiler_SOURCE_DIR}"
+    DEPENDS Mini/Mini.skell "${skelllang_compiler_SOURCE_DIR}/skelllang/native_controls.py"
+    VERBATIM)
+  smtg_add_vst3plugin(SkellMiniNative PACKAGE_NAME "Skell Mini Native DEV"
+    Mini/Mini.cpp "${mini_controls}")
+  target_include_directories(SkellMiniNative PRIVATE
+    "${skellmini_reference_SOURCE_DIR}/dsp" "${CMAKE_CURRENT_BINARY_DIR}")
+  target_link_libraries(SkellMiniNative PRIVATE sdk SkellNativeDSP)
 endif()
