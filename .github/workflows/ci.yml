@@ -21,7 +21,7 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Validate module metadata normalizer
         run: python -m unittest discover -s tests -p test_moduleinfo.py -v
       - name: Configure

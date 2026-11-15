@@ -62,7 +62,7 @@ class ModuleInfoTests(unittest.TestCase):
             resource.mkdir(parents=True)
             metadata = resource / "moduleinfo.json"
             metadata.write_text(json.dumps(self.doc())[:-1] + ",}", encoding="utf-8")
-            self.assertEqual(normalize_build(Path(tmp)), metadata)
+            self.assertEqual(normalize_build(Path(tmp)).resolve(), metadata.resolve())
             validate_manifest(bundle)
             self.assertEqual(json.loads(metadata.read_text(encoding="utf-8")), self.doc())
 
