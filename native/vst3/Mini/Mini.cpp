@@ -1,5 +1,7 @@
 #include "RealtimeTuner.hpp"
-#include <SkellNative/State.h>
+#include "../Source/ControlState.h"
+#include "../Source/ControlParameter.h"
+#include "../Source/ControlAutomation.h"
 #include "pluginterfaces/base/ibstream.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 #include "public.sdk/source/vst/vstaudioeffect.h"
@@ -17,15 +19,9 @@ static DECLARE_UID(kProcessor, 0x781C7C4C, 0xF278447A, 0xA4279A90, 0x1761A4E2);
 static DECLARE_UID(kController, 0xF987AB25, 0xF94C4646, 0xBE7E6D3C, 0x4DA5CC75);
 constexpr auto product = "audio.skell.mini.native.dev";
 
-struct NativeControl {
-    ParamID id;
-    const TChar* title;
-    const char* key;
-    float low, high, initial, skew;
-
-    float plain(float n) const { return low + (high - low) * std::pow(n, 1.f / skew); }
-    float normalized(float p) const { return std::pow(std::clamp((p - low) / (high - low), 0.f, 1.f), skew); }
-};
+using skellnative::sdk::NativeControl;
+using skellnative::sdk::NativeControlFlags;
+using skellnative::vst3::ControlParameter;
 
 #include "MiniControls.inc"
 
@@ -34,27 +30,7 @@ static_assert(std::size(controls) == controlCount);
 static_assert(std::atomic<float>::is_always_lock_free);
 
 std::optional<Values> readState(IBStream* stream) {
-    if (!stream) return {};
-    std::array<std::uint8_t, 512> chunk{};
-    std::vector<std::uint8_t> bytes;
-    for (;;) {
-        int32 n = 0;
-        const auto result = stream->read(chunk.data(), static_cast<int32>(chunk.size()), &n);
-        if (n == 0) break;
-        if (result != kResultOk || n < 0 || n > static_cast<int32>(chunk.size())
-            || bytes.size() + static_cast<std::size_t>(n) > 4096) return {};
-        bytes.insert(bytes.end(), chunk.begin(), chunk.begin() + n);
-    }
-    const auto state = skellnative::sdk::decodeState(product, bytes);
-    if (!state || state->parameters.size() != controlCount) return {};
-    Values values{};
-    for (std::size_t i = 0; i < values.size(); ++i) {
-        const auto found = std::find_if(state->parameters.begin(), state->parameters.end(),
-            [i](const auto& entry) { return entry.persistentId == controls[i].key; });
-        if (found == state->parameters.end()) return {};
-        values[i] = found->normalized;
-    }
-    return values;
+    return skellnative::vst3::readControlState(stream, product, controls);
 }
 
 class Processor final : public AudioEffect {
@@ -81,15 +57,18 @@ public:
     }
 
     tresult PLUGIN_API setupProcessing(ProcessSetup& setup) override {
-        if (!(setup.sampleRate > 0) || !std::isfinite(setup.sampleRate) || setup.maxSamplesPerBlock <= 0
+        if (setup.sampleRate < 8000. || setup.sampleRate > 192000. || !std::isfinite(setup.sampleRate) || setup.maxSamplesPerBlock <= 0
             || setup.symbolicSampleSize != kSample32) return kInvalidArgument;
+        prepared_ = false;
         try {
-            engine_.prepare(std::clamp(setup.sampleRate, 8000., 384000.), 2);
+            engine_.prepare(setup.sampleRate, 2);
             for (auto& channel : scratch_) channel.resize(setup.maxSamplesPerBlock);
         } catch (const std::bad_alloc&) {
             return kOutOfMemory;
         }
-        return AudioEffect::setupProcessing(setup);
+        const auto result = AudioEffect::setupProcessing(setup);
+        prepared_ = result == kResultOk;
+        return result;
     }
 
     uint32 PLUGIN_API getLatencySamples() override {
@@ -104,21 +83,14 @@ public:
     tresult PLUGIN_API setProcessing(TBool) override { return kResultOk; }
 
     tresult PLUGIN_API process(ProcessData& data) override {
-        if (auto* changes = data.inputParameterChanges) {
-            for (int32 q = 0; q < changes->getParameterCount(); ++q) {
-                auto* queue = changes->getParameterData(q);
-                if (!queue || queue->getPointCount() <= 0) continue;
-                int32 offset{};
-                ParamValue value{};
-                if (queue->getPoint(queue->getPointCount() - 1, offset, value) == kResultOk && std::isfinite(value))
-                    for (std::size_t i = 0; i < controlCount; ++i)
-                        if (queue->getParameterId() == controls[i].id)
-                            values_[i].store(static_cast<float>(std::clamp(value, 0., 1.)), std::memory_order_relaxed);
-            }
-        }
-        if (data.numSamples == 0 || (data.numInputs == 0 && data.numOutputs == 0)) return kResultOk;
-        if (data.symbolicSampleSize != kSample32 || data.numSamples < 0
-            || data.numSamples > processSetup.maxSamplesPerBlock || !data.inputs || !data.outputs
+        if (data.numSamples < 0 || data.symbolicSampleSize != kSample32) return kInvalidArgument;
+        const auto apply = [this](std::size_t i, float value) {
+            values_[i].store(value, std::memory_order_relaxed);
+        };
+        if (data.numSamples == 0)
+            return skellnative::vst3::processControlAutomation(data.inputParameterChanges, 0, controls,
+                apply, [](int32, int32) {}) ? kResultOk : kInvalidArgument;
+        if (data.numSamples > processSetup.maxSamplesPerBlock || !prepared_ || !data.inputs || !data.outputs
             || data.numInputs != 1 || data.numOutputs != 1) return kInvalidArgument;
         const auto& input = data.inputs[0];
         auto& output = data.outputs[0];
@@ -140,18 +112,27 @@ public:
             }
         }
 
-        const auto plain = [this](ControlIndex i) { return controls[i].plain(values_[i].load(std::memory_order_relaxed)); };
-        skelly::Parameters params;
-        params.speedMs = plain(control_speed);
-        params.amount = plain(control_amount) / 100.f;
-        params.mix = plain(control_mix) / 100.f;
-        if (plain(control_bypass) >= 0.5f) params.mix = 0.f;
-        params.referenceA = plain(control_a4);
-        engine_.setParameters(params);
         const auto control = _mm_getcsr();
         _mm_setcsr(control | 0x8040u);
-        engine_.process(in.data(), output.channelBuffers32, data.numSamples, channels);
+        const bool valid = skellnative::vst3::processControlAutomation(
+            data.inputParameterChanges, data.numSamples, controls, apply, [&](int32 start, int32 count) {
+                const auto plain = [this](ControlIndex i) { return controls[i].plain(values_[i].load(std::memory_order_relaxed)); };
+                skelly::Parameters params;
+                params.speedMs = plain(control_speed);
+                params.amount = plain(control_amount) / 100.f;
+                params.mix = plain(control_bypass) >= 0.5f ? 0.f : plain(control_mix) / 100.f;
+                params.referenceA = plain(control_a4);
+                engine_.setParameters(params);
+                std::array<const float*, 2> source{};
+                std::array<float*, 2> destination{};
+                for (int i = 0; i < channels; ++i) {
+                    source[i] = in[i] + start;
+                    destination[i] = output.channelBuffers32[i] + start;
+                }
+                engine_.process(source.data(), destination.data(), count, channels);
+            });
         _mm_setcsr(control);
+        if (!valid) return kInvalidArgument;
         output.silenceFlags = 0;
         for (int i = 0; i < channels; ++i) {
             const auto* first = output.channelBuffers32[i];
@@ -170,64 +151,15 @@ public:
     }
 
     tresult PLUGIN_API getState(IBStream* stream) override {
-        if (!stream) return kInvalidArgument;
-        skellnative::sdk::StateSnapshot snapshot;
-        for (std::size_t i = 0; i < controlCount; ++i)
-            snapshot.parameters.push_back({controls[i].key, values_[i].load(std::memory_order_relaxed)});
-        auto bytes = skellnative::sdk::encodeState(product, snapshot);
-        if (!bytes) return kResultFalse;
-        const auto size = static_cast<int32>(bytes->size());
-        int32 written{};
-        return stream->write(bytes->data(), size, &written) == kResultOk && written == size
-            ? kResultOk : kResultFalse;
+        return skellnative::vst3::writeControlState(stream, product, controls,
+            [this](std::size_t i) { return values_[i].load(std::memory_order_relaxed); });
     }
 
 private:
+    bool prepared_ = false;
     std::array<std::atomic<float>, controlCount> values_{};
     std::array<std::vector<float>, 2> scratch_;
     skelly::RealtimeTuner engine_;
-};
-
-class ControlParameter final : public Parameter {
-public:
-    explicit ControlParameter(const NativeControl& spec) : spec_(spec) {
-        auto title = spec.title;
-        std::copy_n(title, std::char_traits<TChar>::length(title) + 1, info.title);
-        info.id = spec.id;
-        info.flags = ParameterInfo::kCanAutomate;
-        if (spec.id == controls[control_bypass].id) {
-            info.flags |= ParameterInfo::kIsBypass;
-            info.stepCount = 1;
-        }
-        info.defaultNormalizedValue = spec.normalized(spec.initial);
-        setNormalized(info.defaultNormalizedValue);
-    }
-    ParamValue toPlain(ParamValue value) const override { return spec_.plain(static_cast<float>(value)); }
-    ParamValue toNormalized(ParamValue value) const override { return spec_.normalized(static_cast<float>(value)); }
-    void toString(ParamValue value, String128 text) const override {
-        TChar buffer[128]{};
-        std::copy_n(buffer, 128, text);
-        char ascii[64]{};
-        std::snprintf(ascii, sizeof ascii, "%.2f", toPlain(value));
-        for (std::size_t i = 0; ascii[i]; ++i) text[i] = static_cast<TChar>(ascii[i]);
-    }
-    bool fromString(const TChar* text, ParamValue& normalized) const override {
-        if (!text) return false;
-        std::array<char, 128> ascii{};
-        std::size_t i = 0;
-        for (; i < ascii.size() - 1 && text[i]; ++i) {
-            if (text[i] > 127) return false;
-            ascii[i] = static_cast<char>(text[i]);
-        }
-        if (text[i]) return false;
-        char* end = nullptr;
-        const float value = std::strtof(ascii.data(), &end);
-        if (end == ascii.data() || *end != 0 || !std::isfinite(value)) return false;
-        normalized = spec_.normalized(value);
-        return true;
-    }
-private:
-    const NativeControl& spec_;
 };
 
 class Controller final : public EditController {

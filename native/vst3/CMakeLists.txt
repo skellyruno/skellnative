@@ -155,9 +155,13 @@ if(SKELLNATIVE_BUILD_MINI)
     GIT_REPOSITORY https://github.com/skellyruno/skelltune-mini.git
     GIT_TAG 6a1c0267967cab696f8d3b3371e9c40a4ed75a78
     SOURCE_SUBDIR native-headers-only)
+  set(SKELLNATIVE_SKELLLANG_SOURCE "" CACHE PATH "Local SkellLang compiler checkout override")
+  if(SKELLNATIVE_SKELLLANG_SOURCE)
+    set(FETCHCONTENT_SOURCE_DIR_SKELLLANG_COMPILER "${SKELLNATIVE_SKELLLANG_SOURCE}")
+  endif()
   FetchContent_Declare(skelllang_compiler
     GIT_REPOSITORY https://github.com/skellyruno/skellLang.git
-    GIT_TAG a5c1d71b646c7ea5a0f122b289bcef372a035a45
+    GIT_TAG 93871860d9d2b5b70ecfa6a9f5ddcd444e463431
     SOURCE_SUBDIR compiler-only)
   FetchContent_MakeAvailable(skellmini_reference skelllang_compiler)
   set(mini_controls "${CMAKE_CURRENT_BINARY_DIR}/MiniControls.inc")
@@ -167,9 +171,37 @@ if(SKELLNATIVE_BUILD_MINI)
     WORKING_DIRECTORY "${skelllang_compiler_SOURCE_DIR}"
     DEPENDS Mini/Mini.skell "${skelllang_compiler_SOURCE_DIR}/skelllang/native_controls.py"
     VERBATIM)
+  # Keep official validation as a CTest gate. The SDK logs ERROR for deliberately
+  # rejected unsupported rates even when its test passes; MSBuild interprets that
+  # console text as a compiler error. CTest preserves the full validator output.
+  set(saved_run_validator "${SMTG_RUN_VST_VALIDATOR}")
+  set(SMTG_RUN_VST_VALIDATOR OFF)
   smtg_add_vst3plugin(SkellMiniNative PACKAGE_NAME "Skell Mini Native DEV"
     Mini/Mini.cpp "${mini_controls}")
+  set(SMTG_RUN_VST_VALIDATOR "${saved_run_validator}")
+  add_dependencies(SkellMiniNative validator)
+  enable_testing()
+  add_test(NAME SkellMiniOfficialValidator COMMAND $<TARGET_FILE:validator>
+    "${CMAKE_BINARY_DIR}/VST3/$<CONFIG>/Skell Mini Native DEV.vst3")
+  add_test(NAME SkellMiniBinaryAudio COMMAND $<TARGET_FILE:SpacerVst3Parity> --mini
+    "${CMAKE_BINARY_DIR}/VST3/$<CONFIG>/Skell Mini Native DEV.vst3")
   target_include_directories(SkellMiniNative PRIVATE
     "${skellmini_reference_SOURCE_DIR}/dsp" "${CMAKE_CURRENT_BINARY_DIR}")
   target_link_libraries(SkellMiniNative PRIVATE sdk SkellNativeDSP)
+  add_custom_command(TARGET SkellMiniNative POST_BUILD
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/../../tools/normalize_moduleinfo.py"
+      "${CMAKE_BINARY_DIR}/VST3/$<CONFIG>" --product "Skell Mini Native DEV"
+    VERBATIM)
+
 endif()
+
+# Native parameter/state/automation contracts, exercised against real SDK queues.
+enable_testing()
+add_executable(SkellNativeControlTests tests/ControlRuntimeTests.cpp
+  "${SDK_ROOT}/public.sdk/source/common/memorystream.cpp")
+target_link_libraries(SkellNativeControlTests PRIVATE sdk_hosting sdk SkellNativeDSP)
+target_compile_features(SkellNativeControlTests PRIVATE cxx_std_17)
+if(MSVC)
+  target_compile_options(SkellNativeControlTests PRIVATE /W4 /WX)
+endif()
+add_test(NAME SkellNativeControlTests COMMAND SkellNativeControlTests)

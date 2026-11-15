@@ -29,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Regression-test strict VST3 metadata and prototype identities
-        run: python -m unittest discover -s tests -p test_moduleinfo.py -v
+        run: python -m unittest discover -s tests -v
       - name: Compile portable DSP and SkellDraw tests
         shell: pwsh
         run: |
@@ -38,10 +38,12 @@ jobs:
           ctest --test-dir native/build -C Release --output-on-failure
       - name: Configure official pinned Steinberg VST3 SDK
         shell: pwsh
-        run: cmake -S native/vst3 -B native/vst3/build -A x64
+        run: cmake -S native/vst3 -B native/vst3/build -A x64 -DSKELLNATIVE_BUILD_MINI=ON
       - name: Compile JUCE-free Windows VST3
         shell: pwsh
-        run: cmake --build native/vst3/build --target SkellNativeGain --config Release --parallel 2
+        run: cmake --build native/vst3/build --target SkellNativeGain SkellMiniNative SkellNativeControlTests SpacerVst3Parity --config Release --parallel 2
+      - name: Verify Mini validator, loaded audio and shared parameter runtime
+        run: ctest --test-dir native/vst3/build -C Release --output-on-failure --no-tests=error
       - name: Check exact Windows x64 PE32+ VST3 bundle
         run: python -m tools.check_skellnative_vst3 native/vst3/build
       - name: Compile SkellDraw Win32 interaction smoke test
