@@ -129,12 +129,26 @@ public:
 
     template<std::size_t N>
     void curve(const std::array<float, N>& values, Rect r, float minimum, float maximum,
-               std::uint32_t rgb, bool invert = false, int width = 1) const {
-        std::array<POINT, N> points{};
+               std::uint32_t rgb, bool invert = false, int width = 1, bool filled = false) const {
+        static_assert(N > 1);
+        std::array<POINT, N + 2> points{};
         for (std::size_t i = 0; i < N; ++i) {
             const auto level = unit((values[i] - minimum) / (maximum - minimum));
             points[i] = {r.x + static_cast<LONG>(i * r.width / (N - 1)),
                          r.y + std::lround(r.height * (invert ? level : 1.f - level))};
+        }
+        if (filled) {
+            points[N] = {r.x + r.width, r.y + r.height};
+            points[N + 1] = {r.x, r.y + r.height};
+            auto brush = CreateSolidBrush(color(rgb));
+            if (!brush) return;
+            const auto oldBrush = SelectObject(dc_, brush);
+            const auto oldPen = SelectObject(dc_, GetStockObject(NULL_PEN));
+            Polygon(dc_, points.data(), static_cast<int>(points.size()));
+            SelectObject(dc_, oldPen);
+            SelectObject(dc_, oldBrush);
+            DeleteObject(brush);
+            return;
         }
         auto pen = CreatePen(PS_SOLID, width, color(rgb));
         if (!pen) return;

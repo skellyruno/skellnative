@@ -426,7 +426,7 @@ void Editor::paint(HDC target, int width, int height) {
         p.segment(x, grid.y, x, grid.y + grid.height, t.line);
         p.text(ticks[i], {x + 3, grid.y + 1, 30, 12}, 10, false, t.muted, DT_LEFT);
     }
-    p.curve(spectrum_.main, grid, -100.f, 0.f, t.faint);
+    p.curve(spectrum_.main, grid, -100.f, 0.f, t.faint, false, 1, true);
     p.curve(spectrum_.side, grid, -95.f, 5.f, t.text);
     p.segment(grid.x, lineY, grid.x + grid.width, lineY, t.line);
     p.text(L"0 dB", {39, static_cast<int>(lineY) - 12, 40, 11}, 10, false, t.muted, DT_LEFT);

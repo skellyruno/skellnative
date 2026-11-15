@@ -8,7 +8,11 @@ namespace Skelly::NativeSpacer {
 
 class SpacerProcessor final : public skellnative::sdk::Processor {
 public:
-    void configure(const Values& values) noexcept { values_ = values; }
+    void configure(const Values& values) noexcept {
+        if (specs[smooth].plain(values[smooth]) != specs[smooth].initial)
+            smoothAtConstructionDefault_ = false;
+        values_ = values;
+    }
     float& value(std::size_t index) noexcept { return values_[index]; }
 
     bool prepare(double sampleRate, std::uint32_t) noexcept override {
@@ -41,7 +45,10 @@ public:
         auto plain = [this](Index index) { return specs[index].plain(values_[index]); };
         skell::SpacerParams parameters;
         parameters.amount = plain(amount) * 0.01f;
-        parameters.smooth = plain(smooth) * 0.01f;
+        // JUCE APVTS starts with an unsnapped raw default. After the first
+        // real value change it uses snapped values, including a return to 30%.
+        constexpr float rawSmoothDefault = (30.f / 100.f) * 100.f;
+        parameters.smooth = (smoothAtConstructionDefault_ ? rawSmoothDefault : plain(smooth)) * 0.01f;
         parameters.link = plain(link) * 0.01f;
         parameters.attackMs = plain(attack);
         parameters.releaseMs = plain(release);
@@ -72,6 +79,7 @@ private:
     skell::SpacerEngine studio_;
     skell::ZeroLatencyEngine live_;
     bool liveActive_ = true;
+    bool smoothAtConstructionDefault_ = true;
 };
 
 } // namespace Skelly::NativeSpacer
