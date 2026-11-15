@@ -1,7 +1,7 @@
-skell-native 1
-# Format: key, native VST3 ID, label, minimum, maximum, default, skew
-parameter speed 2100 "Retune Speed (ms)" 0 200 25 0.4
-parameter amount 2101 "Correction Amount (%)" 0 100 100 1
-parameter mix 2102 "Wet Mix (%)" 0 100 100 1
-parameter a4 2103 "A4 Reference (Hz)" 400 480 440 1
-parameter bypass 2104 "Bypass" 0 1 0 1
+skell-native 2
+# Format: key, native VST3 ID, label, minimum, maximum, default, skew, discrete steps, units, flags
+parameter speed 2100 "Retune Speed (ms)" 0 200 25 0.4 0 "" automate
+parameter amount 2101 "Correction Amount (%)" 0 100 100 1 0 "" automate
+parameter mix 2102 "Wet Mix (%)" 0 100 100 1 0 "" automate
+parameter a4 2103 "A4 Reference (Hz)" 400 480 440 1 0 "" automate
+parameter bypass 2104 "Bypass" 0 1 0 1 1 "" bypass

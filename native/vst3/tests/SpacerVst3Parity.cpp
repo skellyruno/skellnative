@@ -290,6 +290,47 @@ void testMini(const char* path) {
         mini.stop();
         return result;
     };
+    MemoryStream defaults;
+    require(component.getState(&defaults) == kResultOk, "Mini save default state");
+    // An event queue inside a block must equal separate host blocks at the same
+    // boundaries. This catches adapters that apply the final point too early.
+    const auto automationRender = [&](bool split) {
+        defaults.seek(0, IBStream::kIBSeekSet, nullptr);
+        require(component.setState(&defaults) == kResultOk, "Mini restore state");
+        require(component.setActive(true) == kResultOk, "Mini automation activate");
+        require(audio.setProcessing(true) == kResultOk, "Mini automation start");
+        std::vector<float> result;
+        Buffers<float> buffer(block, 1, 0);
+        buffer.data.numInputs = 1;
+        for (int start = 0; start < rate; start += block) {
+            const int boundaries[]{0, 37, 173, block};
+            const float mix[]{1.f, .35f, 0.f};
+            const int chunks = split ? 3 : 1;
+            for (int part = 0; part < chunks; ++part) {
+                const int offset = split ? boundaries[part] : 0;
+                const int count = split ? boundaries[part+1] - offset : block;
+                ParameterChanges changes(1);
+                int32 index{};
+                auto* queue = changes.addParameterData(2102, index);
+                if (split) queue->addPoint(0, mix[part], index);
+                else for (int i=0; i<3; ++i) queue->addPoint(boundaries[i], mix[i], index);
+                buffer.data.numSamples = count;
+                buffer.data.inputParameterChanges = &changes;
+                for (int i=0; i<count; ++i)
+                    buffer.inputs[0][i] = .2f * static_cast<float>(std::sin(6.283185307179586 * 430 * (start+offset+i)/rate));
+                require(audio.process(buffer.data) == kResultOk, "Mini sample-offset render");
+                result.insert(result.end(), buffer.outputs[0].begin(), buffer.outputs[0].begin()+count);
+            }
+        }
+        mini.stop();
+        return result;
+    };
+    const auto queued = automationRender(false);
+    const auto split = automationRender(true);
+    require(queued == split, "Mini sample-offset automation must equal split host blocks");
+    std::cout << "Mini sample-offset automation: " << queued.size() << " exact samples\n";
+    defaults.seek(0, IBStream::kIBSeekSet, nullptr);
+    require(component.setState(&defaults) == kResultOk, "Mini restore before pitch test");
     const auto dry = run(0.f);
     const auto wet = run(1.f);
     const auto latency = static_cast<int>(audio.getLatencySamples());
