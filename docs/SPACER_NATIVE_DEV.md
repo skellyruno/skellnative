@@ -90,3 +90,20 @@ Spacer 1.0.0. The independent SDK validator returned **46 passed, 1 failed**.
 The Scan Programs check reports an unnamed program in the Factory Presets
 list. V16 declares one program while PluginProcessor.h returns an empty name.
 The V16 bundle was tested directly from its build directory.
+
+## Follow-up: exact Live and Studio parity
+
+Commit `016953a` preserves the legacy APVTS Smooth default before the first
+effective edit. JUCE initializes the raw default to 30.000001907348633 and
+uses snapped values after an edit. The prior native adapter snapped the
+initial value to 30.0. This accounted for the Live waveform mismatch.
+
+The reconstructed Windows x64 Release bundle passed all 47 validator checks.
+Binary A/B passed two 420-case matrices with zero differing samples across
+29,502,900 samples. The second matrix includes automation away from and back
+to the Smooth default. The revised UI fills the track spectrum and the
+editor capture host completed all 12 captures. Pixel parity, legacy state
+import, and FL Studio verification remain open.
+
+Updated DEV ZIP SHA-256:
+`F1EB07C82B417D45FC6DAE2D783B869002C33CF91E58C6E9FC29BD1702CBCF53`.
