@@ -22,6 +22,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Validate module metadata normalizer
+        run: python -m unittest discover -s tests -p test_moduleinfo.py -v
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DSKELLNATIVE_BUILD_TESTS=ON
       - name: Build

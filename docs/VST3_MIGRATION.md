@@ -30,7 +30,7 @@ cmake -S native -B native/build -DSKELLNATIVE_BUILD_TESTS=ON
 cmake --build native/build --config Release --parallel
 ctest --test-dir native/build -C Release --output-on-failure
 ```
-On Windows x64 with CMake, MSVC, Python and Git:
+On Windows x64 with CMake, MSVC, Python 3.10+ and Git:
 ```powershell
 cmake -S native/vst3 -B native/vst3/build -A x64
 cmake --build native/vst3/build --target SkellNativeGain --config Release --parallel 2
@@ -38,6 +38,8 @@ python -m tools.check_skellnative_vst3 native/vst3/build
 cmake --build native/vst3/build --target SkellDrawUiSmoke SkellNativeVst3AdapterBench validator --config Release --parallel 2
 python -m tools.validate_skellnative_vst3 native/vst3/build
 ```
+The CMake VST3 target post-build automatically reserializes the official SDK's generated `moduleinfo.json` to strict JSON (some SDK emissions contain trailing commas). The standalone PE verifier also validates exact processor/controller IDs and strict JSON.
+
 First setup fetches the pinned official Steinberg SDK with submodules.
 The SDK is **MIT licensed**, with attribution requirements. The VST standard is
 not Skelly-owned, and this native plugin uses the official Steinberg API.

@@ -1,18 +1,23 @@
-# SkellNative architecture (experimental)
+# SkellNative architecture (experimental) 🩻
 
 ## Responsibilities
-- **SkellNative**: low-level planar audio buffers, runtime contracts, future Windows native UI and Steinberg VST3 SDK boundary.
-- **SkellCore**: shared DSP engines, plugin UI widgets, presets, themes and cross-plugin utilities.
-- **SkellForge**: generators, validation, build orchestration, packaging and release gates.
+- **SkellNative**: independent native processing contracts, low-level buffer operations, Win32 rendering boundary, and direct Steinberg VST3 plugin adapter.
+- **SkellCore**: reusable DSP, plugin UI widgets, presets, themes and cross-plugin utilities.
+- **SkellForge**: project generation, validation, orchestration, Windows builds, packaging and release gates.
 
-## Current scope
-`SkellNative::Native` is a JUCE-free C++17 static library with checked planar float buffer copy/clear primitives and no external dependencies. It does **not** create a VST3 binary, implement a plugin processor interface, provide a GUI, or run audio from a DAW. Compatibility with FL Studio and CPU/latency behavior is **not yet tested**.
+## Implemented today
+- `SkellNative::Native` is a JUCE-free C++17 static library with checked planar buffer copy/clear operations and no external dependencies.
+- `native/include/SkellNative/` contains the original portable SkellNative DSP, plugin-state and parameter prototypes transferred from SkellForge.
+- `native/vst3/` contains a real *experimental* Windows x64 direct-Steinberg VST3 gain effect with separate processor/controller, genuine host automation, native SkellDraw Win32 editor and pinned official Steinberg SDK.
+- The native VST3 output is built by Windows GitHub Actions and checked with Steinberg's official validator. No JUCE/VSTGUI is required for this native prototype.
+- The Steinberg-generated `moduleinfo.json` is automatically validated and normalized to strict JSON to avoid invalid trailing commas.
 
-## Porting milestones (not yet implemented)
-1. Establish owned audio process/parameter/state contracts with real-time-safety tests.
-2. Create a pinned, license-reviewed Steinberg VST3 SDK adapter (VST3 **plugin**, not VST3 **host**); add manufacturer/product ID and state-preservation tests.
-3. Windows native editor and SkellCore UI bridge, screenshot/interaction testing.
-4. Native SkellForge generation path and verified Windows VST3/FL Studio smoke tests.
-5. Optional side-by-side port of a low-risk plugin with preset, automation-ID, state and audio A/B regression checks.
+The plugin is **not production validated**: FL Studio load/unload, automation/state recall, UI scaling, CPU/latency and sound verification remain separate mandatory gates.
 
-Never replace existing JUCE plugins automatically. Build one native plugin end-to-end and verify before migrating any production project.
+## Next milestones
+1. Real FL Studio acceptance tests on user Windows hardware.
+2. Stable public native SDK contracts and backward-compatible bridge to SkellCore.
+3. Native project generation backend in SkellForge, preserving existing JUCE templates.
+4. Opt-in native port of an existing low-risk Skelly plugin after reference audio A/B and preset/state compatibility checks.
+
+The original source and immutable import commit are documented in [VST3 transfer details](VST3_MIGRATION.md). Do not automatically migrate or rewrite shipped JUCE plugins.

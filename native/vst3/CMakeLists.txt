@@ -93,3 +93,14 @@ if(MSVC)
 endif()
 
 # Host validator and real FL Studio session tests are separate release gates.
+
+# The upstream Steinberg moduleinfo generator currently emits trailing commas
+# that fail strict RFC 8259 JSON parsers. Re-serialize the *generated factory
+# metadata* after compilation, not a hand-maintained second class registry.
+# Verify IDs and other semantics before writing to avoid hiding bad manifests.
+find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
+add_custom_command(TARGET SkellNativeGain POST_BUILD
+  COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/../../tools/normalize_moduleinfo.py" "${CMAKE_BINARY_DIR}"
+  COMMENT "Ensure Steinberg moduleinfo.json is strict validated JSON"
+  VERBATIM
+)

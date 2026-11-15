@@ -5,6 +5,8 @@ import argparse
 import struct
 from pathlib import Path
 
+from tools.normalize_moduleinfo import validate_manifest
+
 
 class VerificationError(RuntimeError):
     """A native VST3 artifact did not satisfy mandatory integrity checks."""
@@ -37,6 +39,7 @@ def inspect(build: Path) -> tuple[Path, Path]:
     if len(binaries) != 1:
         raise VerificationError(f"Expected exactly one VST3 PE binary, got {len(binaries)}")
     check_pe_x64(binaries[0])
+    validate_manifest(bundle)
     return bundle, binaries[0]
 
 
