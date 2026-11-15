@@ -1,0 +1,78 @@
+name: SkellNative Windows VST3 (JUCE-free)
+
+on:
+  pull_request:
+    paths:
+      - "native/**"
+      - "tools/**"
+      - ".github/workflows/native-vst3.yml"
+  push:
+    branches: [main]
+    paths:
+      - "native/**"
+      - "tools/**"
+      - ".github/workflows/native-vst3.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Only cancel superseded PR runs; preserve main, release and manual checks.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  direct-vst3:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile portable DSP and SkellDraw tests
+        shell: pwsh
+        run: |
+          cmake -S native -B native/build -DSKELLNATIVE_BUILD_TESTS=ON
+          cmake --build native/build --config Release --parallel 2
+          ctest --test-dir native/build -C Release --output-on-failure
+      - name: Configure official pinned Steinberg VST3 SDK
+        shell: pwsh
+        run: cmake -S native/vst3 -B native/vst3/build -A x64
+      - name: Compile JUCE-free Windows VST3
+        shell: pwsh
+        run: cmake --build native/vst3/build --target SkellNativeGain --config Release --parallel 2
+      - name: Check exact Windows x64 PE32+ VST3 bundle
+        run: python -m tools.check_skellnative_vst3 native/vst3/build
+      - name: Compile SkellDraw Win32 interaction smoke test
+        shell: pwsh
+        run: cmake --build native/vst3/build --target SkellDrawUiSmoke --config Release --parallel 2
+      - name: Test native editor attach, paint and input
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem native/vst3/build -Recurse -File -Filter SkellDrawUiSmoke.exe | Select-Object -First 1
+          if (-not $exe) { throw "Missing SkellDraw UI smoke test" }
+          & $exe.FullName
+          if ($LASTEXITCODE -ne 0) { throw "Native HWND/UI smoke failed" }
+      - name: Compile exact-source VST3 audio adapter regression benchmark
+        shell: pwsh
+        run: cmake --build native/vst3/build --target SkellNativeVst3AdapterBench --config Release --parallel 2
+      - name: Verify VST3 processor parity and automation test matrix
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem native/vst3/build -Recurse -File -Filter SkellNativeVst3AdapterBench.exe | Select-Object -First 1
+          if (-not $exe) { throw "Missing native adapter regression executable" }
+          & $exe.FullName | Set-Content vst3_adapter_profile.csv -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { throw "VST3 adapter parity failed" }
+          $lines = @(Get-Content vst3_adapter_profile.csv | Where-Object { $_ -match '^\d{5},' })
+          if ($lines.Count -ne 72) { throw "Expected 72 native adapter test scenarios; got $($lines.Count)" }
+      - name: Compile Steinberg official plugin validator
+        shell: pwsh
+        run: cmake --build native/vst3/build --target validator --config Release --parallel 2
+      - name: Run official Steinberg VST3 host-compatibility validator
+        run: python -m tools.validate_skellnative_vst3 native/vst3/build
+      - name: Upload experimental VST3 (not a stable release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: SkellNative-Gain-Experimental-Windows-VST3
+          path: native/vst3/build/**/SkellNativeGain.vst3/**/*
+          if-no-files-found: error
+          retention-days: 14
