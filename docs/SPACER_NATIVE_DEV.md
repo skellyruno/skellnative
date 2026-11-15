@@ -83,3 +83,10 @@ To investigate the remaining exact Live difference, use the binary harness
 to find the first differing sample within one Live fixture, capture its
 effective parameter values in both processors, then compare the first
 differing 60-band control update. Continue keeping V16 measurements separate.
+
+Spacer V16 `e5c2681` also built locally as Windows x64 Release with the cached
+JUCE 8.0.12 source. Its compiled factory reports the same production CIDs as
+Spacer 1.0.0. The independent SDK validator returned **46 passed, 1 failed**.
+The Scan Programs check reports an unnamed program in the Factory Presets
+list. V16 declares one program while PluginProcessor.h returns an empty name.
+The V16 bundle was tested directly from its build directory.
