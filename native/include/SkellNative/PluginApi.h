@@ -4,6 +4,7 @@
 // No JUCE or Steinberg headers. This is NOT a stable binary/FFI ABI yet.
 #include <SkellNative/Dsp.h>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -60,6 +61,19 @@ struct ParameterChange {
     std::uint32_t sampleOffset = 0; // Offset inside current audio block.
 };
 
+// Optional read-only auxiliary input. The main block provides the frame count.
+struct Sidechain {
+    std::array<const float*, 2> channel{};
+    std::size_t channelCount = 0;
+
+    bool valid() const noexcept {
+        if (channelCount > channel.size()) return false;
+        for (std::size_t i = 0; i < channelCount; ++i)
+            if (!channel[i]) return false;
+        return true;
+    }
+};
+
 struct ProcessContext {
     skellnative::Block audio;       // Two max, planar f32, caller-owned.
     double sampleRate = 48000.0;
@@ -67,9 +81,10 @@ struct ProcessContext {
     bool playing = false;
     const ParameterChange* changes = nullptr;
     std::size_t changeCount = 0;
+    Sidechain sidechain;
 
     bool valid() const noexcept {
-        if (!audio.valid() || !std::isfinite(sampleRate)
+        if (!audio.valid() || !sidechain.valid() || !std::isfinite(sampleRate)
             || sampleRate < 1000.0 || sampleRate > 384000.0
             || changeCount > 1024 || (changeCount && !changes)) return false;
         for (std::size_t i = 0; i < changeCount; ++i) {
