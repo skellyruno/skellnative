@@ -15,8 +15,10 @@ set(SMTG_CREATE_PLUGIN_LINK OFF CACHE BOOL "" FORCE)
 
 if(SKELLNATIVE_STEINBERG_SDK)
   if(NOT EXISTS "${SKELLNATIVE_STEINBERG_SDK}/CMakeLists.txt" OR
-     NOT EXISTS "${SKELLNATIVE_STEINBERG_SDK}/public.sdk/CMakeLists.txt" OR
-     NOT EXISTS "${SKELLNATIVE_STEINBERG_SDK}/pluginterfaces/CMakeLists.txt")
+     NOT EXISTS "${SKELLNATIVE_STEINBERG_SDK}/public.sdk/source/vst/vstaudioeffect.h" OR
+     NOT EXISTS "${SKELLNATIVE_STEINBERG_SDK}/pluginterfaces/vst/ivstaudioprocessor.h" OR
+     NOT EXISTS "${SKELLNATIVE_STEINBERG_SDK}/base/source/fobject.h" OR
+     NOT EXISTS "${SKELLNATIVE_STEINBERG_SDK}/cmake/modules/SMTG_AddVST3Library.cmake")
     message(FATAL_ERROR "SDK path must be a COMPLETE recursive VST3 SDK checkout")
   endif()
   set(SDK_ROOT "${SKELLNATIVE_STEINBERG_SDK}")
@@ -104,3 +106,42 @@ add_custom_command(TARGET SkellNativeGain POST_BUILD
   COMMENT "Ensure Steinberg moduleinfo.json is strict validated JSON"
   VERBATIM
 )
+
+option(SKELLNATIVE_BUILD_SPACER "Build the separate Skell Spacer Native DEV pilot" OFF)
+set(SKELLNATIVE_SPACER_SOURCE "" CACHE PATH "Pinned Skell Spacer reference checkout")
+if(SKELLNATIVE_BUILD_SPACER)
+  if(NOT SKELLNATIVE_SPACER_SOURCE)
+    include(FetchContent)
+    FetchContent_Declare(skell_spacer_reference
+      GIT_REPOSITORY https://github.com/skellyruno/skell-spacer-vst.git
+      GIT_TAG 05373baa6fb87ed870cb572d1fff888b1747daf7
+      SOURCE_SUBDIR native-headers-only)
+    FetchContent_MakeAvailable(skell_spacer_reference)
+    set(SKELLNATIVE_SPACER_SOURCE "${skell_spacer_reference_SOURCE_DIR}")
+  endif()
+  foreach(header SpacerDSP.h ZeroLatencyEngine.h)
+    if(NOT EXISTS "${SKELLNATIVE_SPACER_SOURCE}/Source/${header}")
+      message(FATAL_ERROR "Missing Spacer reference DSP header: ${header}")
+    endif()
+  endforeach()
+  # V16 keeps these header names but removes the Studio DSP. Fail at configure
+  # time with an actionable error if a V16 checkout is provided accidentally.
+  file(STRINGS "${SKELLNATIVE_SPACER_SOURCE}/Source/SpacerDSP.h"
+    SKELLNATIVE_SPACER_STUDIO_DECLARATION REGEX "^class SpacerEngine ")
+  if(NOT SKELLNATIVE_SPACER_STUDIO_DECLARATION)
+    message(FATAL_ERROR
+      "The two-engine Spacer DEV target needs Spacer reference 05373baa. "
+      "The supplied checkout has no Studio engine. Omit SKELLNATIVE_SPACER_SOURCE to fetch the pinned source.")
+  endif()
+  smtg_add_vst3plugin(SkellSpacerNative PACKAGE_NAME "Skell Spacer Native DEV"
+    Spacer/Factory.cpp Spacer/VstProcessor.cpp Spacer/VstController.cpp Spacer/Editor.cpp)
+  target_include_directories(SkellSpacerNative PRIVATE "${SKELLNATIVE_SPACER_SOURCE}/Source")
+  target_link_libraries(SkellSpacerNative PRIVATE sdk SkellNativeDSP SkellDrawControls user32 gdi32)
+
+  add_executable(SpacerVst3Parity tests/SpacerVst3Parity.cpp
+    "${SDK_ROOT}/public.sdk/source/common/memorystream.cpp"
+    "${SDK_ROOT}/public.sdk/source/vst/hosting/module_win32.cpp"
+    "${SDK_ROOT}/public.sdk/source/vst/hosting/plugprovider.cpp")
+  target_compile_features(SpacerVst3Parity PRIVATE cxx_std_17)
+  target_link_libraries(SpacerVst3Parity PRIVATE sdk_hosting user32 gdi32)
+endif()
