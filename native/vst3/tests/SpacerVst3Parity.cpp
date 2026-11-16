@@ -400,6 +400,16 @@ int main(int argc, char** argv) {
             testMini(argv[2], argc == 5 ? argv[4] : nullptr);
             return EXIT_SUCCESS;
         }
+        if (argc == 4 && std::string(argv[1]) == "--capture-native") {
+            PluginInstance native(argv[2]);
+            native.prepare(48000., 512, true, 2, 0, kSample32);
+            const std::filesystem::path out(argv[3]);
+            spacer_capture::capture(*native.controller, out / "spacer-100percent", false, 495, 405);
+            spacer_capture::capture(*native.controller, out / "spacer-80percent", false, 396, 324);
+            spacer_capture::capture(*native.controller, out / "spacer-200percent", false, 990, 810);
+            native.stop();
+            return EXIT_SUCCESS;
+        }
         PluginInstance legacy(argv[1]), native(argv[2]);
         if (argc == 5) {
             const std::filesystem::path out(argv[4]);

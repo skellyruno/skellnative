@@ -46,10 +46,10 @@ jobs:
           ctest --test-dir native/build -C Release --output-on-failure
       - name: Configure official pinned Steinberg VST3 SDK
         shell: pwsh
-        run: cmake -S native/vst3 -B native/vst3/build -A x64 -DSKELLNATIVE_BUILD_MINI=ON
+        run: cmake -S native/vst3 -B native/vst3/build -A x64 -DSKELLNATIVE_BUILD_MINI=ON -DSKELLNATIVE_BUILD_SPACER=ON
       - name: Compile JUCE-free Windows VST3
         shell: pwsh
-        run: cmake --build native/vst3/build --target SkellNativeGain SkellMiniNative SkellNativeControlTests SpacerVst3Parity --config Release --parallel 2
+        run: cmake --build native/vst3/build --target SkellNativeGain SkellMiniNative SkellSpacerNative SkellNativeControlTests SpacerVst3Parity --config Release --parallel 2
       - name: Verify Mini validator, loaded audio and shared parameter runtime
         run: ctest --test-dir native/vst3/build -C Release --output-on-failure --no-tests=error
       - name: Capture real native Mini editor at 80, 100 and 200 percent
@@ -62,10 +62,25 @@ jobs:
           & $exe.FullName --mini $bundle --capture (Resolve-Path native/vst3/build/mini-screenshots).Path
           if ($LASTEXITCODE -ne 0) { throw "Native Mini editor capture / lifecycle failed" }
       - name: Upload real native Mini editor screenshots
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: SkellMiniNative-Real-Windows-UI
           path: native/vst3/build/mini-screenshots/*.bmp
+          if-no-files-found: error
+          retention-days: 14
+      - name: Capture real native Spacer editor at 80, 100 and 200 percent
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem native/vst3/build -File -Recurse -Filter SpacerVst3Parity.exe | Select-Object -First 1
+          $bundle = Join-Path (Resolve-Path native/vst3/build).Path "VST3/Release/Skell Spacer Native DEV.vst3"
+          New-Item -ItemType Directory -Force native/vst3/build/spacer-screenshots | Out-Null
+          & $exe.FullName --capture-native $bundle (Resolve-Path native/vst3/build/spacer-screenshots).Path
+          if ($LASTEXITCODE -ne 0) { throw "Native Spacer editor capture/lifecycle failed" }
+      - name: Upload real Spacer Win32 editor screenshots
+        uses: actions/upload-artifact@v7
+        with:
+          name: SkellSpacerNative-Real-Windows-UI
+          path: native/vst3/build/spacer-screenshots/*.bmp
           if-no-files-found: error
           retention-days: 14
       - name: Check exact Windows x64 PE32+ VST3 bundle
@@ -103,23 +118,33 @@ jobs:
           $build = (Resolve-Path native/vst3/build).Path
           $gain = Join-Path $build "VST3/Release/SkellNativeGain.vst3"
           $mini = Join-Path $build "VST3/Release/Skell Mini Native DEV.vst3"
-          & powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Run-FLStudio-Acceptance.ps1 -Bundle $gain,$mini -OutputRoot (Join-Path $build "flstudio-preflight")
+          $spacer = Join-Path $build "VST3/Release/Skell Spacer Native DEV.vst3"
+          & ./scripts/Run-FLStudio-Acceptance.ps1 -Bundle @($gain, $mini, $spacer) -OutputRoot (Join-Path $build "flstudio-preflight")
           if ($LASTEXITCODE -ne 0) { throw "VST3 preflight failed" }
           $report = Get-ChildItem (Join-Path $build "flstudio-preflight") -Filter acceptance.json -Recurse | Select-Object -First 1
           if (-not $report) { throw "Missing acceptance report" }
           $json = Get-Content $report.FullName -Raw | ConvertFrom-Json
-          if ($json.checks.scan_and_load -ne "NOT_RUN" -or @($json.bundles).Count -ne 2) { throw "Preflight must not claim DAW success" }
+          if ($json.checks.scan_and_load -ne "NOT_RUN" -or @($json.bundles).Count -ne 3) { throw "Preflight must not claim DAW success" }
       - name: Upload isolated FL Studio preflight report (not DAW evidence)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: SkellNative-FLStudio-Acceptance-Preflight
           path: native/vst3/build/flstudio-preflight/**/acceptance.json
           if-no-files-found: error
           retention-days: 14
       - name: Upload experimental VST3 (not a stable release)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: SkellNative-Gain-Experimental-Windows-VST3
           path: native/vst3/build/**/SkellNativeGain.vst3/**/*
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload experimental Mini and Spacer VST3 for DAW acceptance
+        uses: actions/upload-artifact@v7
+        with:
+          name: SkellNative-Mini-and-Spacer-Experimental-Windows-VST3
+          path: |
+            native/vst3/build/VST3/Release/Skell Mini Native DEV.vst3/**/*
+            native/vst3/build/VST3/Release/Skell Spacer Native DEV.vst3/**/*
           if-no-files-found: error
           retention-days: 14
