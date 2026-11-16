@@ -91,7 +91,8 @@ int main() {
         bad[2] = controls[2];
         require(validControlTable(bad.data(), bad.size()));
         // Invalid automation must not touch previously published state/output.
-        const auto priorState = state, priorOutput = output;
+        const auto priorState = state;
+        const auto priorOutput = output;
         changes.clearQueue();
         point(changes, 10, 17, .5);
         require(!processControlAutomation(&changes, 16, controls, apply, render));
