@@ -9,6 +9,9 @@
 #include <filesystem>
 #include <fstream>
 #include <vector>
+#include <cstring>
+#include <algorithm>
+#include <cstdint>
 
 namespace spacer_capture {
 using namespace Steinberg;
@@ -52,8 +55,30 @@ public:
         info.bmiHeader.biCompression = BI_RGB;
         void* bits = nullptr;
         auto bitmap = CreateDIBSection(dest, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
-        auto old = SelectObject(dest, bitmap);
-        const auto copied = BitBlt(dest, 0, 0, width_, height_, source, 48, 48, SRCCOPY);
+        auto old = bitmap ? SelectObject(dest, bitmap) : nullptr;
+        require(source && dest && bitmap && old && bits, "Allocate real screenshot surface");
+        // The CI display can be smaller than a resized plugin (e.g. 990x810
+        // with taskbar on a 768px desktop). Desktop BitBlt then records the
+        // taskbar and a black stripe instead of the plugin. Draw directly
+        // through the editor's native WM_PRINTCLIENT handler when off-screen.
+        const bool offscreen =
+            48 + width_ > GetSystemMetrics(SM_CXSCREEN) ||
+            48 + height_ > GetSystemMetrics(SM_CYSCREEN);
+        bool copied = false;
+        if (offscreen) {
+            auto child = GetWindow(window, GW_CHILD);
+            require(child != nullptr, "Real editor child required for offscreen capture");
+            const auto pixels = static_cast<std::size_t>(width_) * height_;
+            std::memset(bits, 0xA5, pixels * sizeof(std::uint32_t));
+            SendMessageW(child, WM_PRINTCLIENT, reinterpret_cast<WPARAM>(dest), PRF_CLIENT);
+            // Fail closed if a legacy editor lacks WM_PRINTCLIENT support;
+            // never provide an apparently successful black/desktop screenshot.
+            const auto* raster = static_cast<const std::uint32_t*>(bits);
+            for (std::size_t i = 0; i < pixels; i += std::max(std::size_t{1}, pixels / 2048))
+                if (raster[i] != 0xA5A5A5A5u) { copied = true; break; }
+        } else {
+            copied = BitBlt(dest, 0, 0, width_, height_, source, 48, 48, SRCCOPY) != 0;
+        }
         BITMAPFILEHEADER header{};
         header.bfType = 0x4d42;
         header.bfOffBits = sizeof(header) + sizeof(info.bmiHeader);
