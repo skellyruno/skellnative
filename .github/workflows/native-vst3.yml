@@ -120,7 +120,9 @@ jobs:
           $mini = Join-Path $build "VST3/Release/Skell Mini Native DEV.vst3"
           $spacer = Join-Path $build "VST3/Release/Skell Spacer Native DEV.vst3"
           & ./scripts/Run-FLStudio-Acceptance.ps1 -Bundle @($gain, $mini, $spacer) -OutputRoot (Join-Path $build "flstudio-preflight")
-          if ($LASTEXITCODE -ne 0) { throw "VST3 preflight failed" }
+          # This is a PowerShell script invoked in-process, not a native EXE:
+          # LASTEXITCODE belongs to the previous CTest process and remains stale.
+          # Script exceptions terminate this step automatically.
           $report = Get-ChildItem (Join-Path $build "flstudio-preflight") -Filter acceptance.json -Recurse | Select-Object -First 1
           if (-not $report) { throw "Missing acceptance report" }
           $json = Get-Content $report.FullName -Raw | ConvertFrom-Json
