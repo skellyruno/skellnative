@@ -139,6 +139,14 @@ if(SKELLNATIVE_BUILD_SPACER)
     Spacer/Factory.cpp Spacer/VstProcessor.cpp Spacer/VstController.cpp Spacer/Editor.cpp)
   target_include_directories(SkellSpacerNative PRIVATE "${SKELLNATIVE_SPACER_SOURCE}/Source")
   target_link_libraries(SkellSpacerNative PRIVATE sdk SkellNativeDSP SkellDrawControls user32 gdi32)
+  # Steinberg's moduleinfo generator can emit non-RFC JSON trailing commas.
+  # Validate exact Spacer factory IDs and write strict JSON before CI bundles.
+  add_custom_command(TARGET SkellSpacerNative POST_BUILD
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/../../tools/normalize_moduleinfo.py"
+      "${CMAKE_BINARY_DIR}/VST3/$<CONFIG>" --product "Skell Spacer Native DEV"
+    COMMENT "Normalize and verify strict Spacer native VST3 module metadata"
+    VERBATIM)
+
 endif()
 
 if(SKELLNATIVE_BUILD_SPACER OR SKELLNATIVE_BUILD_MINI)

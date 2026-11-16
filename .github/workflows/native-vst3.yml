@@ -83,6 +83,8 @@ jobs:
           path: native/vst3/build/spacer-screenshots/*.bmp
           if-no-files-found: error
           retention-days: 14
+      - name: Validate strict JSON and exact identities for ALL native VST3 bundles
+        run: python -m tools.validate_native_all native/vst3/build/VST3/Release
       - name: Check exact Windows x64 PE32+ VST3 bundle
         run: python -m tools.check_skellnative_vst3 native/vst3/build
       - name: Compile SkellDraw Win32 interaction smoke test
