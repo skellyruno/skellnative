@@ -39,11 +39,16 @@ public:
     }
     ~Surface() { DestroyWindow(window); }
 
-    void capture(const std::filesystem::path& path) const {
-        ShowWindow(window, SW_SHOWNOACTIVATE);
-        SetWindowPos(window, HWND_TOPMOST, 48, 48, width_, height_, SWP_NOACTIVATE);
-        RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
-        pump(160);
+    void capture(const std::filesystem::path& path, bool renderEditor) const {
+        const bool offscreen =
+            48 + width_ > GetSystemMetrics(SM_CXSCREEN) ||
+            48 + height_ > GetSystemMetrics(SM_CYSCREEN);
+        if (!renderEditor && !offscreen) {
+            ShowWindow(window, SW_SHOWNOACTIVATE);
+            SetWindowPos(window, HWND_TOPMOST, 48, 48, width_, height_, SWP_NOACTIVATE);
+            RedrawWindow(window, nullptr, nullptr, RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+            pump(160);
+        }
         auto source = GetDC(nullptr);
         auto dest = CreateCompatibleDC(source);
         BITMAPINFO info{};
@@ -57,25 +62,17 @@ public:
         auto bitmap = CreateDIBSection(dest, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
         auto old = bitmap ? SelectObject(dest, bitmap) : nullptr;
         require(source && dest && bitmap && old && bits, "Allocate real screenshot surface");
-        // The CI display can be smaller than a resized plugin (e.g. 990x810
-        // with taskbar on a 768px desktop). Desktop BitBlt then records the
-        // taskbar and a black stripe instead of the plugin. Draw directly
-        // through the editor's native WM_PRINTCLIENT handler when off-screen.
-        const bool offscreen =
-            48 + width_ > GetSystemMetrics(SM_CXSCREEN) ||
-            48 + height_ > GetSystemMetrics(SM_CYSCREEN);
+        // Paint native editors off-screen so desktop windows and the taskbar
+        // cannot contaminate captures, even when the size fits the display.
         bool copied = false;
-        if (offscreen) {
+        if (renderEditor || offscreen) {
             auto child = GetWindow(window, GW_CHILD);
             require(child != nullptr, "Real editor child required for offscreen capture");
             const auto pixels = static_cast<std::size_t>(width_) * height_;
             std::memset(bits, 0xA5, pixels * sizeof(std::uint32_t));
             SendMessageW(child, WM_PRINTCLIENT, reinterpret_cast<WPARAM>(dest), PRF_CLIENT);
-            // Fail closed if a legacy editor lacks WM_PRINTCLIENT support;
-            // never provide an apparently successful black/desktop screenshot.
             const auto* raster = static_cast<const std::uint32_t*>(bits);
-            for (std::size_t i = 0; i < pixels; i += std::max(std::size_t{1}, pixels / 2048))
-                if (raster[i] != 0xA5A5A5A5u) { copied = true; break; }
+            copied = std::find(raster, raster + pixels, 0xA5A5A5A5u) == raster + pixels;
         } else {
             copied = BitBlt(dest, 0, 0, width_, height_, source, 48, 48, SRCCOPY) != 0;
         }
@@ -103,7 +100,7 @@ private:
 };
 
 inline void capture(IEditController& controller, const std::filesystem::path& output, bool cycleThemes,
-                    int width = 495, int height = 405) {
+                    int width = 495, int height = 405, bool renderEditor = false) {
     std::filesystem::create_directories(output.parent_path());
     Surface parent(width, height);
     {
@@ -120,10 +117,13 @@ inline void capture(IEditController& controller, const std::filesystem::path& ou
         require(child && GetClientRect(child, &childBounds)
                     && childBounds.right == width && childBounds.bottom == height,
                 "Editor client size differs from capture size");
+        if (renderEditor)
+            require(SendMessageW(child, WM_NCHITTEST, 0, 0) != HTTRANSPARENT,
+                    "Editor HWND is transparent to pointer events");
         for (int i = 0; i < (cycleThemes ? 4 : 1); ++i) {
             auto path = output;
             path += "-" + std::to_string(i) + ".bmp";
-            parent.capture(path);
+            parent.capture(path, renderEditor);
             if (cycleThemes) {
                 const auto point = MAKELPARAM(25, 24);
                 SendMessageW(child, WM_LBUTTONDOWN, MK_LBUTTON, point);
@@ -134,5 +134,15 @@ inline void capture(IEditController& controller, const std::filesystem::path& ou
         require(view->removed() == kResultOk, "Remove screenshot editor");
     }
     require(GetWindow(parent.window, GW_CHILD) == nullptr, "Stale editor child after removal");
+}
+
+inline void captureScales(IEditController& controller, const std::filesystem::path& output,
+                          int width, int height) {
+    for (const int percent : {80, 100, 125, 150, 200}) {
+        auto prefix = output;
+        prefix += "-" + std::to_string(percent) + "percent";
+        capture(controller, prefix, false, (width * percent + 50) / 100,
+                (height * percent + 50) / 100, true);
+    }
 }
 } // namespace spacer_capture

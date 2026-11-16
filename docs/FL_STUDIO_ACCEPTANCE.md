@@ -10,6 +10,8 @@ To open an installed FL Studio after staging, also pass -FLStudioExe "C:\Program
 
 The runner verifies that each source is an existing VST3 folder with one genuine AMD64 PE32+ binary and no symlink/junction entries; it computes SHA-256, stages isolated copies, and writes acceptance.json and FL_STUDIO_CHECKLIST.md. All host gates start with NOT_RUN. The runner can launch the DAW but does not claim to automate its UI.
 
-Add the newly staged VST3 directory as a FL Studio scan folder. Rescan, load each plugin, and complete every checklist gate against real audio and copied test projects. Keep production plugins untouched. Measure sample rates, block sizes, CPU/PDC and UI scaling, then record exact commit hashes, screenshots and failures.
+On Windows, FL Studio discovers VST3 bundles under its standard VST3 roots, such as `C:\Program Files\Common Files\VST3`. The custom plugin search paths apply to older VST formats. Copy the staged bundles into a dedicated test subfolder under a supported VST3 root, using administrator access if needed. If the host lists two copies of a plugin, verify the loaded DLL path and SHA-256 before recording results.
+
+Rescan with verification enabled, load each plugin, and complete every checklist gate against real audio and copied test projects. Keep production plugins untouched. Measure sample rates, block sizes, CPU/PDC and UI scaling, then record exact commit hashes, screenshots and failures.
 
 Release requires genuine interactive FL Studio scan/load, state recall, parameter automation, multiple-instance/editor lifecycle, measured latency/CPU and audio quality evidence. GitHub CI validation alone is insufficient.
