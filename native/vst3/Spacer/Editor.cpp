@@ -461,7 +461,7 @@ void Editor::paint(HDC target, int width, int height) {
     }
     if (hovered_ == ms || pressed_ == ms) p.outline(bounds(ms), t.accent);
 
-    p.card({14, 368, 522, 70});
+    p.card({14, 366, 522, 64});
     p.text(L"LOW CUT", {30, 374, 70, 14}, 11, true, t.muted, DT_LEFT, 1);
     p.text(L"HIGH CUT", {450, 374, 72, 14}, 11, true, t.muted, DT_RIGHT, 1);
     p.text(L"BAND", {14, 374, 522, 14}, 11, true, t.muted, DT_CENTER, 2);
@@ -470,7 +470,7 @@ void Editor::paint(HDC target, int width, int height) {
     valueText(high, details);
     p.text(details, {340, 374, 100, 14}, 12, true, t.text, DT_RIGHT);
     p.range(band, paintedValues_[low], paintedValues_[high]);
-    p.text(L"v0.1.0 DEV", {14, 440, 80, 10}, 9, false, t.faint, DT_LEFT);
+    p.text(L"v0.1.0 DEV", {14, 432, 90, 14}, 11, false, t.faint, DT_LEFT);
     if (GetFocus() == window_ && focused_ >= 0) p.outline(bounds(focused_), t.muted);
     RestoreDC(buffer_, saved);
     BitBlt(target, 0, 0, width, height, buffer_, 0, 0, SRCCOPY);
