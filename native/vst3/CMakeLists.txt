@@ -177,7 +177,7 @@ if(SKELLNATIVE_BUILD_MINI)
   set(saved_run_validator "${SMTG_RUN_VST_VALIDATOR}")
   set(SMTG_RUN_VST_VALIDATOR OFF)
   smtg_add_vst3plugin(SkellMiniNative PACKAGE_NAME "Skell Mini Native DEV"
-    Mini/Mini.cpp "${mini_controls}")
+    Mini/Mini.cpp Mini/MiniEditor.h "${mini_controls}")
   set(SMTG_RUN_VST_VALIDATOR "${saved_run_validator}")
   add_dependencies(SkellMiniNative validator)
   enable_testing()
@@ -187,7 +187,7 @@ if(SKELLNATIVE_BUILD_MINI)
     "${CMAKE_BINARY_DIR}/VST3/$<CONFIG>/Skell Mini Native DEV.vst3")
   target_include_directories(SkellMiniNative PRIVATE
     "${skellmini_reference_SOURCE_DIR}/dsp" "${CMAKE_CURRENT_BINARY_DIR}")
-  target_link_libraries(SkellMiniNative PRIVATE sdk SkellNativeDSP)
+  target_link_libraries(SkellMiniNative PRIVATE sdk SkellNativeDSP SkellDrawControls user32 gdi32)
   add_custom_command(TARGET SkellMiniNative POST_BUILD
     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/../../tools/normalize_moduleinfo.py"
       "${CMAKE_BINARY_DIR}/VST3/$<CONFIG>" --product "Skell Mini Native DEV"

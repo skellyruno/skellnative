@@ -252,7 +252,7 @@ void compareAudio(PluginInstance& legacy, PluginInstance& native, bool automateS
 
 #include "SpacerEditorCapture.h"
 
-void testMini(const char* path) {
+void testMini(const char* path, const char* screenshotDir = nullptr) {
     PluginInstance mini(path);
     auto& component = *mini.component;
     auto& audio = *mini.processor;
@@ -348,6 +348,42 @@ void testMini(const char* path) {
     const int dryHz = crossings(dry), wetHz = crossings(wet);
     std::cout << "Mini pitch dry=" << dryHz << "Hz wet=" << wetHz << "Hz latency=" << latency << " samples\n";
     require(std::abs(dryHz - 430) <= 1 && std::abs(wetHz - 440) <= 3, "Mini pitch correction");
+    for (const int sampleRate : {44100, 96000, 192000}) {
+        for (const int frames : {64, 256, 1024}) {
+            ProcessSetup next{kOffline, kSample32, frames, static_cast<double>(sampleRate)};
+            require(audio.setupProcessing(next) == kResultOk,
+                    "Mini alternate sample-rate and block-size setup");
+            defaults.seek(0, IBStream::kIBSeekSet, nullptr);
+            require(component.setState(&defaults) == kResultOk, "Mini alternate-rate default state");
+            require(component.setActive(true) == kResultOk, "Mini alternate-rate active");
+            require(audio.setProcessing(true) == kResultOk, "Mini alternate-rate process start");
+            Buffers<float> probe(frames, 1, 0);
+            probe.data.numInputs = 1;
+            for (int part=0; part<3; ++part) {
+                probe.data.numSamples = frames;
+                for (int i=0;i<frames;++i) {
+                    const int sampleIndex = part * frames + i;
+                    probe.inputs[0][i] = .15f * static_cast<float>(
+                        std::sin(6.283185307179586 * 430 * sampleIndex / sampleRate)
+                        + .3 * std::sin(6.283185307179586 * 860 * sampleIndex / sampleRate));
+                }
+                require(audio.process(probe.data) == kResultOk, "Mini alternate-rate render");
+                for (int i=0;i<frames;++i) {
+                    const auto value = probe.outputs[0][i];
+                    require(std::isfinite(value) && std::abs(value) < 4.f,
+                            "Mini alternate-rate no nonfinite or runaway signal");
+                }
+            }
+            mini.stop();
+        }
+    }
+    std::cout << "Mini extended rate/block stress: 9 supported combinations finite output\n";
+    if (screenshotDir) {
+        const auto out = std::filesystem::path(screenshotDir);
+        spacer_capture::capture(*mini.controller, out / "mini-100percent", false, 480, 290);
+        spacer_capture::capture(*mini.controller, out / "mini-80percent", false, 384, 232);
+        spacer_capture::capture(*mini.controller, out / "mini-200percent", false, 960, 580);
+    }
 }
 
 int main(int argc, char** argv) {
@@ -359,8 +395,9 @@ int main(int argc, char** argv) {
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
         HostApplication context;
         PluginContextFactory::instance().setPluginContext(&context);
-        if (argc == 3 && std::string(argv[1]) == "--mini") {
-            testMini(argv[2]);
+        if (std::string(argv[1]) == "--mini" &&
+            (argc == 3 || (argc == 5 && std::string(argv[3]) == "--capture"))) {
+            testMini(argv[2], argc == 5 ? argv[4] : nullptr);
             return EXIT_SUCCESS;
         }
         PluginInstance legacy(argv[1]), native(argv[2]);

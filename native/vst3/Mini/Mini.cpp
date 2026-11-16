@@ -1,4 +1,6 @@
 #include "RealtimeTuner.hpp"
+#include "MiniEditor.h"
+#include <cstring>
 #include "../Source/ControlState.h"
 #include "../Source/ControlParameter.h"
 #include "../Source/ControlAutomation.h"
@@ -42,6 +44,8 @@ public:
     }
 
     tresult PLUGIN_API initialize(FUnknown* context) override {
+        if (!skellnative::sdk::validControlTable(controls, controlCount))
+            return kInvalidArgument;
         const auto result = AudioEffect::initialize(context);
         if (result != kResultOk) return result;
         addAudioInput(STR16("Input"), SpeakerArr::kStereo);
@@ -164,7 +168,13 @@ private:
 
 class Controller final : public EditController {
 public:
+    IPlugView* PLUGIN_API createView(FIDString name) override {
+        if (!name || std::strcmp(name, ViewType::kEditor) != 0) return nullptr;
+        return new MiniEditor(*this, controls, controlCount);
+    }
     tresult PLUGIN_API initialize(FUnknown* context) override {
+        if (!skellnative::sdk::validControlTable(controls, controlCount))
+            return kInvalidArgument;
         const auto result = EditController::initialize(context);
         if (result != kResultOk) return result;
         for (const auto& spec : controls) parameters.addParameter(new ControlParameter(spec));

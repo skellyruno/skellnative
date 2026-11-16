@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstddef>
+#include <cstring>
 
 namespace skellnative::sdk {
 enum class NativeControlFlags { automate, bypass, readonly };
@@ -30,4 +32,27 @@ struct NativeControl {
         return steps > 0 ? std::round(n * static_cast<float>(steps)) / static_cast<float>(steps) : n;
     }
 };
+
+// Validate on initialization, not in the real-time callback. Reject ambiguous
+// persistent identities and degenerate parameter maps before a host can save
+// incompatible state. This is additive: existing valid parameter IDs are stable.
+inline bool validControlTable(const NativeControl* entries, std::size_t count) noexcept {
+    if (!entries || count == 0 || count > 1024) return false;
+    for (std::size_t i = 0; i < count; ++i) {
+        const auto& c = entries[i];
+        if (!c.title || !c.key || !*c.key || !c.units
+            || !std::isfinite(c.low) || !std::isfinite(c.high)
+            || !std::isfinite(c.initial) || !std::isfinite(c.skew)
+            || !(c.low < c.high) || c.initial < c.low || c.initial > c.high
+            || c.skew <= 0.f || c.steps < 0 || c.steps > 65535)
+            return false;
+        if (c.flags == NativeControlFlags::bypass && c.steps != 1) return false;
+        if (c.flags == NativeControlFlags::readonly && c.steps != 0) return false;
+        for (std::size_t j = 0; j < i; ++j) {
+            if (c.id == entries[j].id || std::strcmp(c.key, entries[j].key) == 0)
+                return false;
+        }
+    }
+    return true;
+}
 } // namespace skellnative::sdk

@@ -30,6 +30,14 @@ jobs:
       - uses: actions/checkout@v5
       - name: Regression-test strict VST3 metadata and prototype identities
         run: python -m unittest discover -s tests -v
+      - name: Validate PowerShell 5.1 FL Studio preflight syntax
+        shell: powershell
+        run: |
+          $parseErrors = $null
+          $tokens = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PWD "scripts/Run-FLStudio-Acceptance.ps1"), [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -ne 0) { throw ("FL Studio runner syntax: " + ($parseErrors -join "; ")) }
       - name: Compile portable DSP and SkellDraw tests
         shell: pwsh
         run: |
@@ -44,6 +52,22 @@ jobs:
         run: cmake --build native/vst3/build --target SkellNativeGain SkellMiniNative SkellNativeControlTests SpacerVst3Parity --config Release --parallel 2
       - name: Verify Mini validator, loaded audio and shared parameter runtime
         run: ctest --test-dir native/vst3/build -C Release --output-on-failure --no-tests=error
+      - name: Capture real native Mini editor at 80, 100 and 200 percent
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem native/vst3/build -File -Recurse -Filter SpacerVst3Parity.exe | Select-Object -First 1
+          if (-not $exe) { throw "Mini test host not built" }
+          $bundle = (Join-Path (Resolve-Path native/vst3/build).Path "VST3/Release/Skell Mini Native DEV.vst3")
+          New-Item -ItemType Directory -Force native/vst3/build/mini-screenshots | Out-Null
+          & $exe.FullName --mini $bundle --capture (Resolve-Path native/vst3/build/mini-screenshots).Path
+          if ($LASTEXITCODE -ne 0) { throw "Native Mini editor capture / lifecycle failed" }
+      - name: Upload real native Mini editor screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: SkellMiniNative-Real-Windows-UI
+          path: native/vst3/build/mini-screenshots/*.bmp
+          if-no-files-found: error
+          retention-days: 14
       - name: Check exact Windows x64 PE32+ VST3 bundle
         run: python -m tools.check_skellnative_vst3 native/vst3/build
       - name: Compile SkellDraw Win32 interaction smoke test
@@ -73,6 +97,25 @@ jobs:
         run: cmake --build native/vst3/build --target validator --config Release --parallel 2
       - name: Run official Steinberg VST3 host-compatibility validator
         run: python -m tools.validate_skellnative_vst3 native/vst3/build
+      - name: Stage isolated VST3 bundles for local FL Studio acceptance (preflight only)
+        shell: pwsh
+        run: |
+          $build = (Resolve-Path native/vst3/build).Path
+          $gain = Join-Path $build "VST3/Release/SkellNativeGain.vst3"
+          $mini = Join-Path $build "VST3/Release/Skell Mini Native DEV.vst3"
+          & powershell -NoProfile -ExecutionPolicy Bypass -File scripts/Run-FLStudio-Acceptance.ps1 -Bundle $gain,$mini -OutputRoot (Join-Path $build "flstudio-preflight")
+          if ($LASTEXITCODE -ne 0) { throw "VST3 preflight failed" }
+          $report = Get-ChildItem (Join-Path $build "flstudio-preflight") -Filter acceptance.json -Recurse | Select-Object -First 1
+          if (-not $report) { throw "Missing acceptance report" }
+          $json = Get-Content $report.FullName -Raw | ConvertFrom-Json
+          if ($json.checks.scan_and_load -ne "NOT_RUN" -or @($json.bundles).Count -ne 2) { throw "Preflight must not claim DAW success" }
+      - name: Upload isolated FL Studio preflight report (not DAW evidence)
+        uses: actions/upload-artifact@v4
+        with:
+          name: SkellNative-FLStudio-Acceptance-Preflight
+          path: native/vst3/build/flstudio-preflight/**/acceptance.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Upload experimental VST3 (not a stable release)
         uses: actions/upload-artifact@v4
         with:
