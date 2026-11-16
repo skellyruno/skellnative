@@ -380,15 +380,14 @@ void testMini(const char* path, const char* screenshotDir = nullptr) {
     std::cout << "Mini extended rate/block stress: 9 supported combinations finite output\n";
     if (screenshotDir) {
         const auto out = std::filesystem::path(screenshotDir);
-        spacer_capture::capture(*mini.controller, out / "mini-100percent", false, 480, 290);
-        spacer_capture::capture(*mini.controller, out / "mini-80percent", false, 384, 232);
-        spacer_capture::capture(*mini.controller, out / "mini-200percent", false, 960, 580);
+        spacer_capture::captureScales(*mini.controller, out / "mini", 480, 290);
     }
 }
 
 int main(int argc, char** argv) {
     if (argc < 3 || argc > 5 || (argc == 5 && std::string(argv[3]) != "--capture")) {
-        std::cerr << "Usage: SpacerVst3Parity <legacy.vst3> <native.vst3> [state.bin | --capture dir]\n";
+        std::cerr << "Usage: SpacerVst3Parity <legacy.vst3> <native.vst3> [state.bin | --capture dir]\n"
+                     "       SpacerVst3Parity --capture-gain <gain.vst3> <dir>\n";
         return EXIT_FAILURE;
     }
     try {
@@ -404,10 +403,14 @@ int main(int argc, char** argv) {
             PluginInstance native(argv[2]);
             native.prepare(48000., 512, true, 2, 0, kSample32);
             const std::filesystem::path out(argv[3]);
-            spacer_capture::capture(*native.controller, out / "spacer-100percent", false, 495, 405);
-            spacer_capture::capture(*native.controller, out / "spacer-80percent", false, 396, 324);
-            spacer_capture::capture(*native.controller, out / "spacer-200percent", false, 990, 810);
+            spacer_capture::captureScales(*native.controller, out / "spacer", 495, 405);
             native.stop();
+            return EXIT_SUCCESS;
+        }
+        if (argc == 4 && std::string(argv[1]) == "--capture-gain") {
+            PluginInstance gain(argv[2]);
+            spacer_capture::captureScales(*gain.controller, std::filesystem::path(argv[3]) / "gain",
+                                           480, 300);
             return EXIT_SUCCESS;
         }
         PluginInstance legacy(argv[1]), native(argv[2]);

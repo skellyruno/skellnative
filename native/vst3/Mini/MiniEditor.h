@@ -39,7 +39,7 @@ public:
             return Steinberg::kResultFalse;
         const auto& size = getRect();
         HWND handle = CreateWindowExW(0, L"STATIC", L"Skell Mini",
-            WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_CLIPSIBLINGS, 0, 0,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_CLIPSIBLINGS | SS_NOTIFY, 0, 0,
             size.getWidth(), size.getHeight(), static_cast<HWND>(parent),
             nullptr, GetModuleHandleW(nullptr), nullptr);
         if (!handle) return Steinberg::kResultFalse;

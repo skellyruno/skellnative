@@ -196,7 +196,15 @@ LRESULT SkellDrawView::dispatch(HWND hwnd,UINT msg,WPARAM w,LPARAM l) {
     switch(msg) {
     case WM_ERASEBKGND: return 1; // Double-buffered WM_PAINT owns the surface.
     case WM_SIZE: releaseBackBuffer(); return 0;
-    case WM_PAINT: paint(hwnd); return 0;
+    case WM_PAINT: {
+        PAINTSTRUCT ps{};
+        if (const auto dc=BeginPaint(hwnd,&ps)) {
+            paint(hwnd,dc);
+            EndPaint(hwnd,&ps);
+        }
+        return 0;
+    }
+    case WM_PRINTCLIENT: paint(hwnd,reinterpret_cast<HDC>(w)); return 0;
     case WM_TIMER: if(w==kPollTimer) { updateTimer(); return 0; } break;
     case WM_LBUTTONDOWN:
     case WM_LBUTTONDBLCLK: {
@@ -230,19 +238,17 @@ LRESULT SkellDrawView::dispatch(HWND hwnd,UINT msg,WPARAM w,LPARAM l) {
         ? CallWindowProcW(originalWindowProc_,hwnd,msg,w,l)
         : DefWindowProcW(hwnd,msg,w,l);
 }
-void SkellDrawView::paint(HWND hwnd) noexcept {
+void SkellDrawView::paint(HWND hwnd,HDC dc) noexcept {
+    if (!dc) return;
 #if defined(SKELLDRAW_PROFILE)
     LARGE_INTEGER started{};
     QueryPerformanceCounter(&started);
     ++profile_.paintCalls;
 #endif
-    PAINTSTRUCT paint{};
-    HDC dc=BeginPaint(hwnd,&paint);
-    if (!dc) return;
     RECT client{}; GetClientRect(hwnd,&client);
     const int width=std::max(1,static_cast<int>(client.right));
     const int height=std::max(1,static_cast<int>(client.bottom));
-    if (!prepareBackBuffer(dc,width,height)) { EndPaint(hwnd,&paint); return; }
+    if (!prepareBackBuffer(dc,width,height)) return;
     const HDC buffer=backDc_;
     SetMapMode(buffer,MM_ANISOTROPIC);
     SetWindowExtEx(buffer,kBaseW,kBaseH,nullptr);
@@ -281,7 +287,6 @@ void SkellDrawView::paint(HWND hwnd) noexcept {
 
     SetMapMode(buffer,MM_TEXT); // Source bitmap pixels, not logical UI units.
     BitBlt(dc,0,0,width,height,buffer,0,0,SRCCOPY);
-    EndPaint(hwnd,&paint);
 #if defined(SKELLDRAW_PROFILE)
     LARGE_INTEGER finished{}, ticks{};
     QueryPerformanceCounter(&finished);

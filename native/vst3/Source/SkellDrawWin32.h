@@ -50,7 +50,7 @@ public:
 private:
     static LRESULT CALLBACK windowProc(HWND window, UINT message, WPARAM w, LPARAM l);
     LRESULT dispatch(HWND window, UINT message, WPARAM w, LPARAM l);
-    void paint(HWND window) noexcept;
+    void paint(HWND window, HDC dc) noexcept;
     void editStart(int y) noexcept;
     void editMove(int y) noexcept;
     void editEnd() noexcept;
