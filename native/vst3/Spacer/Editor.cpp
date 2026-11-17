@@ -470,7 +470,7 @@ void Editor::paint(HDC target, int width, int height) {
     valueText(high, details);
     p.text(details, {340, 374, 100, 14}, 12, true, t.text, DT_RIGHT);
     p.range(band, paintedValues_[low], paintedValues_[high]);
-    p.text(L"v0.1.0 DEV", {14, 432, 90, 14}, 11, false, t.faint, DT_LEFT);
+    p.text(L"v0.1.0 DEV", {14, 432, 90, 14}, 11, false, t.muted, DT_LEFT);
     if (GetFocus() == window_ && focused_ >= 0) p.outline(bounds(focused_), t.muted);
     RestoreDC(buffer_, saved);
     BitBlt(target, 0, 0, width, height, buffer_, 0, 0, SRCCOPY);
