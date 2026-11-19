@@ -16,7 +16,7 @@ namespace {
 constexpr int designWidth = 550, designHeight = 450, logo = parameterCount + 1;
 constexpr UINT_PTR pollId = 17;
 constexpr wchar_t property[] = L"SkellSpacerNativeEditor";
-constexpr Rect band{26, 392, 498, 34}, graph{28, 90, 494, 152};
+constexpr Rect band{26, 390, 498, 28}, graph{28, 90, 494, 152};
 
 constexpr FlatPalette themes[]{
     {0x0b0a09, 0x131210, 0x1b1915, 0x2f2b23, 0xe9e1cc, 0x9b937d, 0x4d483c, 0xb6f56a, 0x0b0c08, 0x26231c, 0x3a4a22},
@@ -461,7 +461,7 @@ void Editor::paint(HDC target, int width, int height) {
     }
     if (hovered_ == ms || pressed_ == ms) p.outline(bounds(ms), t.accent);
 
-    p.card({14, 368, 522, 70});
+    p.card({14, 366, 522, 60});
     p.text(L"LOW CUT", {30, 374, 70, 14}, 11, true, t.muted, DT_LEFT, 1);
     p.text(L"HIGH CUT", {450, 374, 72, 14}, 11, true, t.muted, DT_RIGHT, 1);
     p.text(L"BAND", {14, 374, 522, 14}, 11, true, t.muted, DT_CENTER, 2);
@@ -470,7 +470,7 @@ void Editor::paint(HDC target, int width, int height) {
     valueText(high, details);
     p.text(details, {340, 374, 100, 14}, 12, true, t.text, DT_RIGHT);
     p.range(band, paintedValues_[low], paintedValues_[high]);
-    p.text(L"v0.1.0 DEV", {14, 440, 80, 10}, 9, false, t.faint, DT_LEFT);
+    p.text(L"v0.1.0 DEV", {14, 428, 90, 14}, 11, false, t.muted, DT_LEFT);
     if (GetFocus() == window_ && focused_ >= 0) p.outline(bounds(focused_), t.muted);
     RestoreDC(buffer_, saved);
     BitBlt(target, 0, 0, width, height, buffer_, 0, 0, SRCCOPY);
