@@ -13,6 +13,22 @@ if ($LaunchFLStudio -and (-not $FLStudioExe -or -not (Test-Path -LiteralPath $FL
     throw "LaunchFLStudio requires an existing FLStudioExe path."
 }
 $root = [System.IO.Path]::GetFullPath($OutputRoot)
+# Validate every source/output relationship before creating any directories.
+# A rejected destination must not modify an existing VST3 bundle.
+$canonicalSources = @()
+foreach ($source in $Bundle) {
+    if (-not (Test-Path -LiteralPath $source -PathType Container)) { throw "Missing VST3 bundle: $source" }
+    $canonical = (Resolve-Path -LiteralPath $source).Path
+    if (-not $canonical.EndsWith(".vst3", [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Bundle must end in .vst3: $canonical"
+    }
+    if ($root.Equals($canonical, [StringComparison]::OrdinalIgnoreCase) -or
+        $root.StartsWith($canonical + [IO.Path]::DirectorySeparatorChar,
+                         [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Output cannot be nested inside a source bundle."
+    }
+    $canonicalSources += $canonical
+}
 if (-not (Test-Path -LiteralPath $root)) { [void](New-Item -ItemType Directory -Path $root -Force) }
 $runId = [DateTime]::UtcNow.ToString("yyyyMMddTHHmmssZ") + "-" + [Guid]::NewGuid().ToString("N").Substring(0,8)
 $run = Join-Path $root $runId
@@ -20,16 +36,7 @@ $run = Join-Path $root $runId
 $staging = Join-Path $run "VST3"
 [void](New-Item -ItemType Directory -Path $staging)
 $records = @()
-foreach ($source in $Bundle) {
-    if (-not (Test-Path -LiteralPath $source -PathType Container)) { throw "Missing VST3 bundle: $source" }
-    $canonical = (Resolve-Path -LiteralPath $source).Path
-    if (-not $canonical.EndsWith(".vst3", [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Bundle must end in .vst3: $canonical"
-    }
-    if ($run.StartsWith($canonical + [IO.Path]::DirectorySeparatorChar,
-                        [StringComparison]::OrdinalIgnoreCase)) {
-        throw "Output cannot be nested inside a source bundle."
-    }
+foreach ($canonical in $canonicalSources) {
     $entries = @(Get-Item -LiteralPath $canonical -Force) +
         @(Get-ChildItem -LiteralPath $canonical -Recurse -Force)
     foreach ($entry in $entries) {
@@ -54,8 +61,15 @@ foreach ($source in $Bundle) {
     }
     $destination = Join-Path $staging (Split-Path $canonical -Leaf)
     if (Test-Path -LiteralPath $destination) { throw "Duplicate staged name: $destination" }
-    Copy-Item -LiteralPath $canonical -Destination $destination -Recurse
     $hash = (Get-FileHash -LiteralPath $binary[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    Copy-Item -LiteralPath $canonical -Destination $destination -Recurse
+    $relativeBinary = $binary[0].FullName.Substring($canonical.Length + 1)
+    $stagedBinary = Join-Path $destination $relativeBinary
+    $stagedHash = (Get-FileHash -LiteralPath $stagedBinary -Algorithm SHA256).Hash.ToLowerInvariant()
+    $sourceHashAfter = (Get-FileHash -LiteralPath $binary[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($hash -ne $stagedHash -or $hash -ne $sourceHashAfter) {
+        throw "Source/staged binary SHA-256 mismatch; acceptance report not written: $canonical"
+    }
     $records += [pscustomobject]@{
         name = (Split-Path $canonical -Leaf)
         source = $canonical
@@ -86,7 +100,7 @@ $checklist = @'
 # SkellNative FL Studio acceptance 🩻
 
 Status: NOT RUN / needs actual interactive Windows DAW testing.
-Add this run's VST3 directory as an extra scan path in FL Studio.
+Copy these DEV bundles into a dedicated test subfolder of a standard Windows VST3 root. Verify loaded paths and SHA-256 values; custom scan folders apply to older VST formats.
 Do not replace production installations or edit existing projects.
 
 - [ ] Rescan and load each exact staged VST3; record FL Studio version and scan errors.
